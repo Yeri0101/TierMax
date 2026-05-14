@@ -217,25 +217,16 @@ export default function Dashboard() {
                     <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.2rem' }}>{t('dashboard.subtitle')}</p>
                 </div>
 
-                <div style={{ flex: '1 1 640px', minWidth: '320px', maxWidth: '760px' }}>
+                <div className="recent-calls-panel">
                     <div className="flex items-center gap-2" style={{ marginBottom: '0.5rem', justifyContent: 'flex-end' }}>
                         <Activity size={16} style={{ color: 'var(--brand-orange)' }} />
                         <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700 }}>{t('dashboard.recent_calls')}</h3>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '0.85rem' }}>
+                    <div className="recent-calls-grid">
                     {recentCallCards.map((call, index) => (
                         <div
                             key={call?.created_at || `empty-${index}`}
-                            style={{
-                                border: '1px solid rgba(255,255,255,0.08)',
-                                background: 'linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.025))',
-                                borderRadius: '14px',
-                                padding: '0.9rem',
-                                minHeight: '148px',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                justifyContent: 'space-between',
-                            }}
+                            className="recent-call-card"
                         >
                             {call ? (
                                 <>
@@ -258,11 +249,11 @@ export default function Dashboard() {
                                     </div>
 
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem', marginTop: '0.85rem' }}>
-                                        <div style={{ padding: '0.45rem 0.55rem', borderRadius: '10px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                        <div className="metric-mini">
                                             <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginBottom: '0.15rem' }}>{t('dashboard.recent_latency')}</div>
                                             <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-primary)' }}>{formatLatency(call.latency_ms)}</div>
                                         </div>
-                                        <div style={{ padding: '0.45rem 0.55rem', borderRadius: '10px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                        <div className="metric-mini">
                                             <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginBottom: '0.15rem' }}>{t('dashboard.recent_tokens')}</div>
                                             <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-primary)' }}>{call.total_tokens.toLocaleString()}</div>
                                         </div>
@@ -370,7 +361,7 @@ export default function Dashboard() {
                                             <button onClick={e => { e.preventDefault(); setEditingId(null); }} className="ctx-edit-cancel" title="Cancel">✕</button>
                                         </div>
                                     ) : (
-                                        <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#ffffff', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}>
+                                        <h3 className="project-title-text">
                                             {p.name}
                                         </h3>
                                     )}
@@ -397,7 +388,7 @@ export default function Dashboard() {
                                         {p.gateway_keys.map(gk => (
                                             <div key={gk.id} className="card-actions" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                                                 <Key size={10} style={{ color: projColor, flexShrink: 0 }} />
-                                                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '4px', padding: '0.1rem 0.4rem', letterSpacing: '0.04em', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-secondary)', background: 'var(--surface-2, rgba(0,0,0,0.04))', border: '1px solid var(--glass-border)', borderRadius: '4px', padding: '0.1rem 0.4rem', letterSpacing: '0.04em', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                                     {gk.key_preview}
                                                 </span>
                                                 {gk.key_name && (
@@ -410,8 +401,8 @@ export default function Dashboard() {
                                                     title={copiedKeyId === gk.id ? 'Copied!' : 'Copy API key'}
                                                     style={{
                                                         position: 'relative',
-                                                        background: copiedKeyId === gk.id ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.06)',
-                                                        border: `1px solid ${copiedKeyId === gk.id ? 'rgba(34,197,94,0.3)' : 'rgba(255,255,255,0.1)'}`,
+                                                        background: copiedKeyId === gk.id ? 'rgba(34,197,94,0.15)' : 'var(--surface-2, rgba(0,0,0,0.04))',
+                                                        border: `1px solid ${copiedKeyId === gk.id ? 'rgba(34,197,94,0.3)' : 'var(--glass-border)'}`,
                                                         cursor: 'pointer',
                                                         color: copiedKeyId === gk.id ? '#22c55e' : 'var(--text-secondary)',
                                                         padding: '0.2rem 0.35rem',
@@ -454,27 +445,27 @@ export default function Dashboard() {
                                         <button
                                             onClick={e => { e.preventDefault(); setColorPickerId(colorPickerId === p.id ? null : p.id); setEditingId(null); }}
                                             title="Change color"
-                                            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', color: 'var(--text-primary)', padding: '0.35rem', borderRadius: '6px', transition: 'all 0.15s', display: 'flex', alignItems: 'center' }}
-                                            onMouseEnter={e => { e.currentTarget.style.color = projColor; e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}
-                                            onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; }}
+                                            style={{ background: 'var(--surface-2, rgba(0,0,0,0.04))', border: '1px solid var(--glass-border)', cursor: 'pointer', color: 'var(--text-primary)', padding: '0.35rem', borderRadius: '6px', transition: 'all 0.15s', display: 'flex', alignItems: 'center' }}
+                                            onMouseEnter={e => { e.currentTarget.style.color = projColor; e.currentTarget.style.background = 'var(--surface-hover, rgba(0,0,0,0.08))'; }}
+                                            onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.background = 'var(--surface-2, rgba(0,0,0,0.04))'; }}
                                         >
                                             <Palette size={14} />
                                         </button>
                                         <button
                                             onClick={e => handleEditStart(p, e)}
                                             title="Rename"
-                                            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', color: 'var(--text-primary)', padding: '0.35rem', borderRadius: '6px', transition: 'all 0.15s', display: 'flex', alignItems: 'center' }}
-                                            onMouseEnter={e => { e.currentTarget.style.color = 'var(--brand-amber)'; e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}
-                                            onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; }}
+                                            style={{ background: 'var(--surface-2, rgba(0,0,0,0.04))', border: '1px solid var(--glass-border)', cursor: 'pointer', color: 'var(--text-primary)', padding: '0.35rem', borderRadius: '6px', transition: 'all 0.15s', display: 'flex', alignItems: 'center' }}
+                                            onMouseEnter={e => { e.currentTarget.style.color = 'var(--brand-amber)'; e.currentTarget.style.background = 'var(--surface-hover, rgba(0,0,0,0.08))'; }}
+                                            onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.background = 'var(--surface-2, rgba(0,0,0,0.04))'; }}
                                         >
                                             <Edit2 size={14} />
                                         </button>
                                         <button
                                             onClick={e => handleDelete(p.id, e)}
                                             title="Delete project"
-                                            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', color: 'var(--text-primary)', padding: '0.35rem', borderRadius: '6px', transition: 'all 0.15s', display: 'flex', alignItems: 'center' }}
+                                            style={{ background: 'var(--surface-2, rgba(0,0,0,0.04))', border: '1px solid var(--glass-border)', cursor: 'pointer', color: 'var(--text-primary)', padding: '0.35rem', borderRadius: '6px', transition: 'all 0.15s', display: 'flex', alignItems: 'center' }}
                                             onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.background = 'rgba(239,68,68,0.15)'; e.currentTarget.style.borderColor = 'rgba(239,68,68,0.3)'; }}
-                                            onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; }}
+                                            onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.background = 'var(--surface-2, rgba(0,0,0,0.04))'; e.currentTarget.style.borderColor = 'var(--glass-border)'; }}
                                         >
                                             <Trash2 size={14} />
                                         </button>

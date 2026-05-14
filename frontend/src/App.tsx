@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect, useContext, createContext, Component } from 'react';
+import type { ReactNode } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom';
-import { Layers, Globe, KeyRound, Home, LogOut, Zap, Shield, Activity } from 'lucide-react';
+import { Layers, Globe, KeyRound, Home, LogOut, Zap, Shield, Activity, Sun, Moon } from 'lucide-react';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import ProjectDetail from './pages/ProjectDetail';
@@ -8,8 +9,99 @@ import { LanguageProvider, useLanguage } from './i18n';
 import { fetchApi } from './api';
 import './index.css';
 
+/* ─── Theme Context ─── */
+type Theme = 'dark' | 'light';
+const ThemeContext = createContext<{ theme: Theme; toggleTheme: () => void }>({
+  theme: 'dark',
+  toggleTheme: () => {},
+});
+
+const useTheme = () => useContext(ThemeContext);
+
+function ThemeProvider({ children }: { children: ReactNode }) {
+  const [theme, setTheme] = useState<Theme>(() => {
+    return (localStorage.getItem('theme') as Theme) || 'dark';
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => setTheme(t => (t === 'dark' ? 'light' : 'dark'));
+
+  return (
+    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+      {children}
+    </ThemeContext.Provider>
+  );
+}
+
+/* ─── Error Boundary — prevents blank screen on render crash ─── */
+class ErrorBoundary extends Component<
+    { children: ReactNode },
+    { hasError: boolean; error: Error | null }
+> {
+    constructor(props: { children: ReactNode }) {
+        super(props);
+        this.state = { hasError: false, error: null };
+    }
+    static getDerivedStateFromError(error: Error) {
+        return { hasError: true, error };
+    }
+    componentDidCatch(error: Error, info: any) {
+        console.error('[ErrorBoundary] Caught render error:', error, info);
+    }
+    render() {
+        if (this.state.hasError) {
+            return (
+                <div style={{
+                    position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column',
+                    alignItems: 'center', justifyContent: 'center', gap: '1rem',
+                    background: 'var(--bg-void)', color: 'var(--text-primary)', padding: '2rem',
+                }}>
+                    <div style={{ fontSize: '2rem' }}>⚠️</div>
+                    <h2 style={{ margin: 0, color: '#ef4444' }}>Error de renderizado</h2>
+                    <pre style={{
+                        background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)',
+                        borderRadius: 8, padding: '1rem', fontSize: '0.75rem', maxWidth: 600,
+                        whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: '#fca5a5',
+                    }}>
+                        {this.state.error?.message}
+                        {'\n\n'}
+                        {this.state.error?.stack?.split('\n').slice(0, 6).join('\n')}
+                    </pre>
+                    <button
+                        onClick={() => this.setState({ hasError: false, error: null })}
+                        style={{
+                            padding: '0.5rem 1.5rem', background: 'var(--accent-gradient)',
+                            border: 'none', borderRadius: 8, color: 'white',
+                            fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem',
+                        }}
+                    >
+                        Reintentar
+                    </button>
+                    <button
+                        onClick={() => window.location.reload()}
+                        style={{
+                            padding: '0.4rem 1.2rem', background: 'transparent',
+                            border: '1px solid rgba(255,255,255,0.2)', borderRadius: 8,
+                            color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.85rem',
+                        }}
+                    >
+                        Recargar página
+                    </button>
+                </div>
+            );
+        }
+        return this.props.children;
+    }
+}
+
+
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const { language, setLanguage, t } = useLanguage();
+  const { theme, toggleTheme } = useTheme();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -72,7 +164,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
 
         {/* Center status chips */}
         {isLoggedIn && (
-          <div className="flex items-center gap-3" style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>
+          <div className="navbar-status flex items-center gap-3">
             <div style={{
               display: 'flex', alignItems: 'center', gap: '0.3rem',
               background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)',
@@ -110,6 +202,40 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
             style={{ padding: '0.4rem 0.7rem', gap: '0.3rem', fontSize: '0.75rem', fontFamily: 'var(--font-mono)', fontWeight: 700 }}
           >
             <Globe size={13} /> {language.toUpperCase()}
+          </button>
+
+          <button
+            onClick={toggleTheme}
+            className="btn btn-secondary btn-icon"
+            title={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+            style={{ position: 'relative', overflow: 'hidden' }}
+          >
+            <span
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'transform 0.35s cubic-bezier(0.34,1.56,0.64,1), opacity 0.25s',
+                transform: theme === 'dark' ? 'rotate(0deg) scale(1)' : 'rotate(180deg) scale(0)',
+                opacity: theme === 'dark' ? 1 : 0,
+                position: 'absolute',
+              }}
+            >
+              <Sun size={15} style={{ color: 'var(--brand-amber)' }} />
+            </span>
+            <span
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'transform 0.35s cubic-bezier(0.34,1.56,0.64,1), opacity 0.25s',
+                transform: theme === 'light' ? 'rotate(0deg) scale(1)' : 'rotate(-180deg) scale(0)',
+                opacity: theme === 'light' ? 1 : 0,
+                position: 'absolute',
+              }}
+            >
+              <Moon size={15} style={{ color: 'var(--text-muted)' }} />
+            </span>
           </button>
 
           {isLoggedIn && (
@@ -189,17 +315,21 @@ const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
 
 function App() {
   return (
-    <LanguageProvider>
-      <Router>
-        <Layout>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
-            <Route path="/projects/:id" element={<PrivateRoute><ProjectDetail /></PrivateRoute>} />
-          </Routes>
-        </Layout>
-      </Router>
-    </LanguageProvider>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <LanguageProvider>
+          <Router>
+            <Layout>
+              <Routes>
+                <Route path="/login" element={<Login />} />
+                <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+                <Route path="/projects/:id" element={<PrivateRoute><ProjectDetail /></PrivateRoute>} />
+              </Routes>
+            </Layout>
+          </Router>
+        </LanguageProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }
 
