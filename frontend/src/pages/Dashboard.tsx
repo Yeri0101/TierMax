@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { fetchApi } from '../api';
 import { FolderOpen, Plus, Trash2, Edit2, Zap, Palette, Key, Activity, Copy, Check, DollarSign } from 'lucide-react';
 import { useLanguage } from '../i18n';
@@ -45,10 +45,9 @@ const PROJECT_COLORS = [
     '#ef4444', // red
 ];
 
-const REFERENCE_COST_PER_1M_TOKENS_USD = 15;
-
 export default function Dashboard() {
     const { t } = useLanguage();
+    const navigate = useNavigate();
     const [projects, setProjects] = useState<Project[]>([]);
     const [newProjectName, setNewProjectName] = useState('');
     const [loading, setLoading] = useState(true);
@@ -93,6 +92,7 @@ export default function Dashboard() {
                         return {
                             totalTokens: Number(analytics?.stats?.totalTokens || 0),
                             totalCostUsd: Number(analytics?.stats?.totalCostUsd || 0),
+                            savedCostUsd: Number(analytics?.stats?.savedCostUsd || 0),
                             logs: projectRecentLogs.map((log: any) => ({
                                 project_id: project.id,
                                 project_name: project.name,
@@ -104,18 +104,18 @@ export default function Dashboard() {
                         };
                     } catch (err) {
                         console.error(`Failed to load analytics for project ${project.id}:`, err);
-                        return { totalTokens: 0, totalCostUsd: 0, logs: [] };
+                        return { totalTokens: 0, totalCostUsd: 0, savedCostUsd: 0, logs: [] };
                     }
                 })
             );
 
             const totalTokens = analyticsResponses.reduce((sum, item) => sum + item.totalTokens, 0);
             const actualCostUsd = analyticsResponses.reduce((sum, item) => sum + item.totalCostUsd, 0);
-            const referenceCostUsd = (totalTokens / 1_000_000) * REFERENCE_COST_PER_1M_TOKENS_USD;
+            const estimatedSavingsUsd = analyticsResponses.reduce((sum, item) => sum + item.savedCostUsd, 0);
             setUsageMetrics({
                 totalTokens,
                 actualCostUsd,
-                estimatedSavingsUsd: Math.max(referenceCostUsd - actualCostUsd, 0),
+                estimatedSavingsUsd,
             });
 
             const latestCalls = analyticsResponses
@@ -140,12 +140,16 @@ export default function Dashboard() {
         e.preventDefault();
         if (!newProjectName.trim()) return;
         try {
-            await fetchApi('/projects', {
+            const createdProject = await fetchApi('/projects', {
                 method: 'POST',
                 body: JSON.stringify({ name: newProjectName }),
             });
             setNewProjectName('');
-            loadProjects();
+            if (createdProject?.id) {
+                navigate(`/projects/${createdProject.id}`);
+            } else {
+                loadProjects();
+            }
         } catch { alert('Failed to create project'); }
     };
 

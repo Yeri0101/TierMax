@@ -12,10 +12,24 @@ analytics.get('/:projectId', async (c) => {
     // 1. Fetch only fields needed for aggregation across ALL logs for this project
     const { data: allLogs, error: aggError } = await supabase
         .from('request_logs')
-        .select('status_code, total_tokens, prompt_tokens, completion_tokens, total_cost_usd, latency_ms, provider, model')
+        .select('status_code, total_tokens, prompt_tokens, completion_tokens, total_cost_usd, latency_ms, provider, model, upstream_key_id')
         .eq('project_id', projectId);
 
     if (aggError) return c.json({ error: aggError.message }, 500);
+
+    const upstreamKeyIds = [...new Set((allLogs || []).map((log: any) => log.upstream_key_id).filter(Boolean))];
+    const { data: upstreamKeys, error: upstreamError } = upstreamKeyIds.length === 0
+        ? { data: [], error: null }
+        : await supabase
+            .from('upstream_keys')
+            .select('id, billing_type')
+            .in('id', upstreamKeyIds);
+
+    if (upstreamError) return c.json({ error: upstreamError.message }, 500);
+
+    const billingTypeByKeyId = new Map(
+        (upstreamKeys || []).map((key: any) => [key.id, key.billing_type || 'paid'])
+    );
 
     // 2. Fetch the most recent 100 logs for the table visualization
     const { data: recentLogs, error: logsError } = await supabase
@@ -37,6 +51,9 @@ analytics.get('/:projectId', async (c) => {
     let totalPromptTokens = 0;
     let totalCompletionTokens = 0;
     let totalCostUsd = 0;
+    let savedCostUsd = 0;
+    let paidTokens = 0;
+    let freeTokens = 0;
     let totalLatency = 0;
 
     const providerUsage: Record<string, number> = {};
@@ -50,7 +67,15 @@ analytics.get('/:projectId', async (c) => {
         totalTokens += log.total_tokens || 0;
         totalPromptTokens += log.prompt_tokens || 0;
         totalCompletionTokens += log.completion_tokens || 0;
-        totalCostUsd += Number(log.total_cost_usd || 0);
+        const logCostUsd = Number(log.total_cost_usd || 0);
+        const billingType = log.upstream_key_id ? billingTypeByKeyId.get(log.upstream_key_id) || 'paid' : 'paid';
+        if (billingType === 'free') {
+            savedCostUsd += logCostUsd;
+            freeTokens += log.total_tokens || 0;
+        } else {
+            totalCostUsd += logCostUsd;
+            paidTokens += log.total_tokens || 0;
+        }
         totalLatency += log.latency_ms || 0;
 
         // Group by provider
@@ -75,6 +100,9 @@ analytics.get('/:projectId', async (c) => {
             totalPromptTokens,
             totalCompletionTokens,
             totalCostUsd: Number(totalCostUsd.toFixed(6)),
+            savedCostUsd: Number(savedCostUsd.toFixed(6)),
+            paidTokens,
+            freeTokens,
             averageLatency
         },
         providerUsage,

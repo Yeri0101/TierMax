@@ -1289,6 +1289,41 @@ select {
   margin-top: 0.15rem;
 }
 
+.billing-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 76px;
+  padding: 0.28rem 0.6rem;
+  border-radius: var(--radius-pill);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.billing-badge.paid {
+  color: var(--brand-amber);
+  background: rgba(255, 170, 0, 0.1);
+  border: 1px solid rgba(255, 170, 0, 0.26);
+}
+
+.billing-badge.free {
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.24);
+}
+
+.provider-edit-panel {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.6rem;
+  padding: 0.65rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
 /* ═══════════════════════════════════════════════════════════════════
    STAT CARDS
    ═══════════════════════════════════════════════════════════════════ */

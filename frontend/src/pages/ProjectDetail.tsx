@@ -4,11 +4,12 @@ import { fetchApi } from '../api';
 import {
     KeyRound, Server, ChevronLeft, Trash2, Plus, RefreshCw,
     Activity, Pause, Play, Zap, Shield, Download, AlertTriangle,
-    CheckCircle2, XCircle, Clock, Cpu, Sliders
+    CheckCircle2, XCircle, Clock, Cpu, Sliders, Edit2, Save, X
 } from 'lucide-react';
 import { useLanguage } from '../i18n';
 
-type UpstreamKey = { id: string; provider: string; created_at: string; key_preview?: string; max_context_tokens?: number | null; max_output_tokens?: number | null };
+type BillingType = 'paid' | 'free';
+type UpstreamKey = { id: string; provider: string; created_at: string; key_preview?: string; billing_type?: BillingType; max_context_tokens?: number | null; max_output_tokens?: number | null };
 type GatewayKey = { id: string; key_name: string; api_key: string; gateway_key_models: any[] };
 type PricingEntry = {
     id: string;
@@ -113,7 +114,7 @@ export default function ProjectDetail() {
     const [analyticsData, setAnalyticsData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
-    const [newProvider, setNewProvider] = useState({ provider: 'groq', api_key: '' });
+    const [newProvider, setNewProvider] = useState<{ provider: string; api_key: string; billing_type: BillingType }>({ provider: 'groq', api_key: '', billing_type: 'paid' });
     const [newGateway, setNewGateway] = useState({ key_name: '', custom_key: '' });
     const [availableModels, setAvailableModels] = useState<{ upstream_key_id: string, provider: string, models: any[] }[]>([]);
     const [selectedModels, setSelectedModels] = useState<{ upstream_key_id: string, model_name: string }[]>([]);
@@ -139,13 +140,15 @@ export default function ProjectDetail() {
     const [testProviderResults, setTestProviderResults] = useState<Record<string, { success: boolean; msg: string; testing: boolean }>>({});
     const [tokenLimitModal, setTokenLimitModal] = useState<{ mode: 'global' | 'single'; providerId?: string; providerName?: string } | null>(null);
     const [tokenLimitInput, setTokenLimitInput] = useState<string>('');
+    const [providerEdit, setProviderEdit] = useState<Record<string, { api_key: string; billing_type: BillingType } | null>>({});
 
     /* ─── Data loading ─── */
     const loadData = async () => {
         try {
             const projData = await fetchApi('/projects');
             const currentProj = projData.find((p: any) => p.id === id);
-            setProject(currentProj);
+            // Only update if we actually found the project — never overwrite with undefined
+            if (currentProj) setProject(currentProj);
 
             const provData = await fetchApi('/providers');
             const projProv = provData.filter((p: any) => p.project_id === id);
@@ -217,6 +220,39 @@ export default function ProjectDetail() {
         } catch (err: any) { alert(err.message || 'Failed to add provider'); }
     };
 
+    const handleStartProviderEdit = (provider: UpstreamKey) => {
+        setProviderEdit(prev => ({
+            ...prev,
+            [provider.id]: {
+                api_key: '',
+                billing_type: provider.billing_type || 'paid',
+            },
+        }));
+    };
+
+    const handleCancelProviderEdit = (providerId: string) => {
+        setProviderEdit(prev => ({ ...prev, [providerId]: null }));
+    };
+
+    const handleSaveProviderEdit = async (providerId: string) => {
+        const edit = providerEdit[providerId];
+        if (!edit) return;
+
+        const payload: Record<string, any> = { billing_type: edit.billing_type };
+        if (edit.api_key.trim()) payload.api_key = edit.api_key.trim();
+
+        try {
+            await fetchApi(`/providers/${providerId}`, {
+                method: 'PATCH',
+                body: JSON.stringify(payload),
+            });
+            setProviderEdit(prev => ({ ...prev, [providerId]: null }));
+            loadData();
+        } catch (err: any) {
+            alert(err.message || 'Failed to update provider');
+        }
+    };
+
     const handleDeleteProvider = async (provId: string) => {
         if (!confirm('Delete this provider key?')) return;
         try { await fetchApi(`/providers/${provId}`, { method: 'DELETE' }); loadData(); }
@@ -247,6 +283,7 @@ export default function ProjectDetail() {
 
     const handlePingAllProviders = async () => {
         setIsTestingAll(true);
+        setTestProviderResults({});  // Clear previous results
         const words = ["sol", "luna", "viento", "fuego", "nube", "rio", "bosque", "cielo", "nieve", "roca", "mar", "estrella"];
 
         // Collect all allowed models across every gateway key, annotated with their upstream_key_id
@@ -267,37 +304,54 @@ export default function ProjectDetail() {
                 matchingModel = allAllowedModels.find(m => m.upstream_key_id && siblingKeyIds.includes(m.upstream_key_id))?.model_name;
             }
 
+            // 30-second timeout per provider test
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000);
+
             try {
-                const res = await fetchApi(`/providers/${p.id}/test`, {
+                const token = localStorage.getItem('token');
+                const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+                const res = await fetch(`${API_URL}/providers/${p.id}/test`, {
                     method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+                    },
                     body: JSON.stringify({
                         prompt: `Responde unicamente con la palabra: ${randomWord}`,
                         ...(matchingModel ? { model: matchingModel } : {})
-                    })
+                    }),
+                    signal: controller.signal,
                 });
-                if (res?.status === 200 || res?.status === '200') {
-                    setTestProviderResults(prev => ({ 
-                        ...prev, 
-                        [p.id]: { success: true, msg: 'OK (200)', testing: false }
+
+                clearTimeout(timeoutId);
+                const data = await res.json().catch(() => null);
+
+                if (res.ok && (data?.status === 200 || data?.status === '200')) {
+                    setTestProviderResults(prev => ({
+                        ...prev,
+                        [p.id]: { success: true, msg: '✓ OK (200)', testing: false }
                     }));
                 } else {
-                    let errMsg = 'Failed';
-                    if (res?.error) {
-                        if (typeof res.error === 'string') errMsg = res.error;
-                        else if (res.error.error && typeof res.error.error === 'string') errMsg = res.error.error;
-                        else if (res.error.error?.message) errMsg = res.error.error.message;
-                        else if (res.error.message) errMsg = res.error.message;
-                        else errMsg = JSON.stringify(res.error);
+                    let errMsg = `Error ${data?.status || res.status}`;
+                    const errData = data?.error;
+                    if (errData) {
+                        if (typeof errData === 'string') errMsg = errData;
+                        else if (errData.message) errMsg = errData.message;
+                        else if (errData.error?.message) errMsg = errData.error.message;
+                        else errMsg = `Error ${data?.status || res.status}`;
                     }
-                    setTestProviderResults(prev => ({ 
-                        ...prev, 
+                    setTestProviderResults(prev => ({
+                        ...prev,
                         [p.id]: { success: false, msg: errMsg, testing: false }
                     }));
                 }
             } catch (err: any) {
-                setTestProviderResults(prev => ({ 
-                    ...prev, 
-                    [p.id]: { success: false, msg: err.message || 'Error', testing: false }
+                clearTimeout(timeoutId);
+                const isTimeout = err.name === 'AbortError';
+                setTestProviderResults(prev => ({
+                    ...prev,
+                    [p.id]: { success: false, msg: isTimeout ? '⏱ Timeout (30s)' : (err.message || 'Error'), testing: false }
                 }));
             }
         });
@@ -534,7 +588,13 @@ export default function ProjectDetail() {
             </div>
         );
     }
-    if (!project) return <div className="glass-panel"><p style={{ color: 'var(--text-muted)' }}>Project not found</p></div>;
+    if (!project) return (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1rem' }}>
+            <p style={{ color: 'var(--text-primary)', fontSize: '1rem', fontWeight: 600 }}>Proyecto no encontrado</p>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>El proyecto puede estar cargando. Intenta recargar.</p>
+            <button className="btn btn-primary btn-sm" onClick={() => window.location.reload()}>Recargar</button>
+        </div>
+    );
 
     const projColor = project.color || '#ff6b2b';
 
@@ -626,6 +686,16 @@ export default function ProjectDetail() {
                                     required
                                 />
                             </div>
+                            <div className="form-group">
+                                <label>{t('project.billing_type')}</label>
+                                <select
+                                    value={newProvider.billing_type}
+                                    onChange={e => setNewProvider({ ...newProvider, billing_type: e.target.value as BillingType })}
+                                >
+                                    <option value="paid">{t('project.billing_paid')}</option>
+                                    <option value="free">{t('project.billing_free')}</option>
+                                </select>
+                            </div>
                             <button type="submit" className="btn btn-primary w-full">
                                 <Plus size={15} /> {t('project.btn_save_fetch')}
                             </button>
@@ -670,6 +740,7 @@ export default function ProjectDetail() {
                                         <thead>
                                             <tr>
                                                 <th>{t('project.provider')} / Key</th>
+                                                <th>{t('project.billing_type')}</th>
                                                 <th>{t('project.status')}</th>
                                                 <th>{t('project.usage')}</th>
                                                 <th>Ctx Limit</th>
@@ -681,6 +752,7 @@ export default function ProjectDetail() {
                                             {providers.map((p, index) => {
                                                 const health = providerHealth[p.id] || { status: 'healthy', requestsPerMinute: 0, requestsPerDay: 0, tokensPerMinute: 0, tokensPerDay: 0 };
                                                 const isEditing = ctxLimitEdit[p.id] !== undefined && ctxLimitEdit[p.id] !== null;
+                                                const apiEdit = providerEdit[p.id];
                                                 return (
                                                     <tr key={p.id}>
                                                         <td>
@@ -690,9 +762,43 @@ export default function ProjectDetail() {
                                                             </div>
                                                             <div className="provider-id">{p.key_preview || p.id.split('-')[0] + '...'}</div>
                                                             {testProviderResults[p.id] && (
-                                                                <div style={{ fontSize: '0.65rem', marginTop: '0.2rem', color: testProviderResults[p.id].testing ? 'var(--text-muted)' : (testProviderResults[p.id].success ? 'var(--status-success)' : 'var(--status-error)') }}>
-                                                                    {testProviderResults[p.id].testing ? 'Testing...' : testProviderResults[p.id].msg}
+                                                                <div style={{ fontSize: '0.65rem', marginTop: '0.2rem', color: testProviderResults[p.id].testing ? '#a69584' : (testProviderResults[p.id].success ? '#22c55e' : '#ef4444') }}>
+                                                                    {testProviderResults[p.id].testing ? '⏳ Testing...' : testProviderResults[p.id].msg}
                                                                 </div>
+                                                            )}
+                                                            {apiEdit && (
+                                                                <div className="provider-edit-panel">
+                                                                    <input
+                                                                        type="password"
+                                                                        value={apiEdit.api_key}
+                                                                        onChange={e => setProviderEdit(prev => ({ ...prev, [p.id]: { ...apiEdit, api_key: e.target.value } }))}
+                                                                        placeholder={t('project.api_key_keep_placeholder')}
+                                                                    />
+                                                                    <div className="flex gap-2">
+                                                                        <button className="btn btn-primary btn-sm" onClick={() => handleSaveProviderEdit(p.id)}>
+                                                                            <Save size={12} /> {t('dashboard.save')}
+                                                                        </button>
+                                                                        <button className="btn btn-secondary btn-sm" onClick={() => handleCancelProviderEdit(p.id)}>
+                                                                            <X size={12} /> {t('settings.btn_cancel')}
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </td>
+                                                        <td>
+                                                            {apiEdit ? (
+                                                                <select
+                                                                    value={apiEdit.billing_type}
+                                                                    onChange={e => setProviderEdit(prev => ({ ...prev, [p.id]: { ...apiEdit, billing_type: e.target.value as BillingType } }))}
+                                                                    style={{ minWidth: 120 }}
+                                                                >
+                                                                    <option value="paid">{t('project.billing_paid')}</option>
+                                                                    <option value="free">{t('project.billing_free')}</option>
+                                                                </select>
+                                                            ) : (
+                                                                <span className={`billing-badge ${p.billing_type === 'free' ? 'free' : 'paid'}`}>
+                                                                    {p.billing_type === 'free' ? t('project.billing_free') : t('project.billing_paid')}
+                                                                </span>
                                                             )}
                                                         </td>
                                                         <td>
@@ -749,6 +855,9 @@ export default function ProjectDetail() {
                                                         </td>
                                                         <td>
                                                             <div className="flex gap-2">
+                                                                <button onClick={() => handleStartProviderEdit(p)} className="btn btn-secondary btn-icon btn-sm" title={t('project.edit_provider')}>
+                                                                    <Edit2 size={13} />
+                                                                </button>
                                                                 {health.status === 'paused' ? (
                                                                     <button onClick={() => handleResetProvider(p.id)} className="btn btn-success btn-sm" title="Resume provider">
                                                                         <Play size={13} /> Resume

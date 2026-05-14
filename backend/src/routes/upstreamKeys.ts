@@ -17,7 +17,7 @@ upstreamKeys.get('/health', async (c) => {
 upstreamKeys.get('/', async (c) => {
     const { data, error } = await supabase
         .from('upstream_keys')
-        .select('id, project_id, provider, created_at, api_key, max_context_tokens, max_output_tokens, projects(name)')
+        .select('id, project_id, provider, created_at, api_key, billing_type, max_context_tokens, max_output_tokens, projects(name)')
         .order('created_at', { ascending: false });
     if (error) return c.json({ error: error.message }, 500);
 
@@ -34,8 +34,9 @@ upstreamKeys.get('/', async (c) => {
 });
 
 upstreamKeys.post('/', async (c) => {
-    const { project_id, provider, api_key } = await c.req.json();
+    const { project_id, provider, api_key, billing_type } = await c.req.json();
     const normalizedApiKey = typeof api_key === 'string' ? api_key.trim() : '';
+    const normalizedBillingType = billing_type === 'free' ? 'free' : 'paid';
 
     if (!project_id || !provider || !normalizedApiKey) {
         return c.json({ error: 'project_id, provider and api_key are required' }, 400);
@@ -53,12 +54,54 @@ upstreamKeys.post('/', async (c) => {
 
     const { data, error } = await supabase
         .from('upstream_keys')
-        .insert([{ project_id, provider, api_key: normalizedApiKey }])
-        .select('id, project_id, provider, created_at')
+        .insert([{ project_id, provider, api_key: normalizedApiKey, billing_type: normalizedBillingType }])
+        .select('id, project_id, provider, billing_type, created_at')
         .single();
 
     if (error) return c.json({ error: error.message }, 500);
     return c.json(data, 201);
+});
+
+upstreamKeys.patch('/:id', async (c) => {
+    const { id } = c.req.param();
+    const body = await c.req.json();
+    const updates: Record<string, any> = {};
+
+    if (body.api_key !== undefined) {
+        const normalizedApiKey = typeof body.api_key === 'string' ? body.api_key.trim() : '';
+        if (!normalizedApiKey) return c.json({ error: 'api_key cannot be empty' }, 400);
+
+        const { data: existingKey, error: existingKeyError } = await supabase
+            .from('upstream_keys')
+            .select('id')
+            .eq('api_key', normalizedApiKey)
+            .neq('id', id)
+            .limit(1)
+            .maybeSingle();
+
+        if (existingKeyError) return c.json({ error: existingKeyError.message }, 500);
+        if (existingKey) return c.json({ error: 'This provider API key already exists' }, 409);
+
+        updates.api_key = normalizedApiKey;
+    }
+
+    if (body.billing_type !== undefined) {
+        updates.billing_type = body.billing_type === 'free' ? 'free' : 'paid';
+    }
+
+    if (Object.keys(updates).length === 0) {
+        return c.json({ error: 'No changes provided' }, 400);
+    }
+
+    const { data, error } = await supabase
+        .from('upstream_keys')
+        .update(updates)
+        .eq('id', id)
+        .select('id, project_id, provider, billing_type, created_at')
+        .single();
+
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json(data);
 });
 
 upstreamKeys.delete('/:id', async (c) => {
