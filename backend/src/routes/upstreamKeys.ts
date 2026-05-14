@@ -62,6 +62,21 @@ upstreamKeys.post('/', async (c) => {
     return c.json(data, 201);
 });
 
+upstreamKeys.patch('/project/:projectId/billing-type', async (c) => {
+    const { projectId } = c.req.param();
+    const body = await c.req.json();
+    const billing_type = body.billing_type === 'free' ? 'free' : 'paid';
+
+    const { data, error } = await supabase
+        .from('upstream_keys')
+        .update({ billing_type })
+        .eq('project_id', projectId)
+        .select('id, project_id, provider, billing_type');
+
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ success: true, billing_type, count: data?.length || 0, providers: data || [] });
+});
+
 upstreamKeys.patch('/:id', async (c) => {
     const { id } = c.req.param();
     const body = await c.req.json();

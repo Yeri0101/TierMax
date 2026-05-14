@@ -4,7 +4,7 @@ import { fetchApi } from '../api';
 import {
     KeyRound, Server, ChevronLeft, Trash2, Plus, RefreshCw,
     Activity, Pause, Play, Zap, Shield, Download, AlertTriangle,
-    CheckCircle2, XCircle, Clock, Cpu, Sliders, Edit2, Save, X
+    CheckCircle2, XCircle, Clock, Cpu, Sliders, Edit2, Save, X, DollarSign
 } from 'lucide-react';
 import { useLanguage } from '../i18n';
 
@@ -250,6 +250,21 @@ export default function ProjectDetail() {
             loadData();
         } catch (err: any) {
             alert(err.message || 'Failed to update provider');
+        }
+    };
+
+    const handleSetAllProviderBilling = async (billingType: BillingType) => {
+        if (!id || providers.length === 0) return;
+        try {
+            await fetchApi(`/providers/project/${id}/billing-type`, {
+                method: 'PATCH',
+                body: JSON.stringify({ billing_type: billingType }),
+            });
+            setProviders(prev => prev.map(p => ({ ...p, billing_type: billingType })));
+            setProviderEdit({});
+            loadRealtimeData();
+        } catch (err: any) {
+            alert(err.message || 'Failed to update provider billing types');
         }
     };
 
@@ -710,6 +725,22 @@ export default function ProjectDetail() {
                                     <Server size={11} /> {t('project.configured_providers')} ({providers.length})
                                 </div>
                                 <div className="panel-actions">
+                                    <button
+                                        onClick={() => handleSetAllProviderBilling('paid')}
+                                        className="btn btn-secondary btn-sm"
+                                        disabled={providers.length === 0}
+                                        title={t('project.billing_set_all_paid')}
+                                    >
+                                        <Shield size={13} /> {t('project.billing_all_paid')}
+                                    </button>
+                                    <button
+                                        onClick={() => handleSetAllProviderBilling('free')}
+                                        className="btn btn-success btn-sm"
+                                        disabled={providers.length === 0}
+                                        title={t('project.billing_set_all_free')}
+                                    >
+                                        <DollarSign size={13} /> {t('project.billing_all_free')}
+                                    </button>
                                     <button onClick={handlePauseAllProjectProviders} className="btn btn-warning btn-sm">
                                         <Pause size={13} /> Pause All
                                     </button>
