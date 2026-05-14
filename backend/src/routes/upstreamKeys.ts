@@ -15,10 +15,20 @@ upstreamKeys.get('/health', async (c) => {
 
 // List upstream keys — includes a masked key_preview (first 4 + last 4 chars) for identification without exposing the full key
 upstreamKeys.get('/', async (c) => {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
         .from('upstream_keys')
         .select('id, project_id, provider, created_at, api_key, billing_type, max_context_tokens, max_output_tokens, projects(name)')
         .order('created_at', { ascending: false });
+
+    if (error?.message?.includes('billing_type')) {
+        const fallback = await supabase
+            .from('upstream_keys')
+            .select('id, project_id, provider, created_at, api_key, max_context_tokens, max_output_tokens, projects(name)')
+            .order('created_at', { ascending: false });
+        data = (fallback.data || []).map((row: any) => ({ ...row, billing_type: 'paid' }));
+        error = fallback.error;
+    }
+
     if (error) return c.json({ error: error.message }, 500);
 
     const sanitized = (data || []).map((row: any) => {

@@ -18,12 +18,21 @@ analytics.get('/:projectId', async (c) => {
     if (aggError) return c.json({ error: aggError.message }, 500);
 
     const upstreamKeyIds = [...new Set((allLogs || []).map((log: any) => log.upstream_key_id).filter(Boolean))];
-    const { data: upstreamKeys, error: upstreamError } = upstreamKeyIds.length === 0
+    let { data: upstreamKeys, error: upstreamError } = upstreamKeyIds.length === 0
         ? { data: [], error: null }
         : await supabase
             .from('upstream_keys')
             .select('id, billing_type')
             .in('id', upstreamKeyIds);
+
+    if (upstreamError?.message?.includes('billing_type')) {
+        const fallback = await supabase
+            .from('upstream_keys')
+            .select('id')
+            .in('id', upstreamKeyIds);
+        upstreamKeys = (fallback.data || []).map((key: any) => ({ ...key, billing_type: 'paid' }));
+        upstreamError = fallback.error;
+    }
 
     if (upstreamError) return c.json({ error: upstreamError.message }, 500);
 
