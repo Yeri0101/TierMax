@@ -1324,6 +1324,47 @@ select {
   background: var(--surface-2);
 }
 
+.billing-dropdown {
+  position: relative;
+  display: inline-flex;
+}
+
+.billing-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  right: 0;
+  z-index: 30;
+  min-width: 230px;
+  padding: 0.35rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--glass-bg);
+  box-shadow: var(--shadow-lg), var(--ring-subtle);
+  backdrop-filter: blur(16px);
+}
+
+.billing-dropdown-menu button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.65rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: left;
+}
+
+.billing-dropdown-menu button:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
 /* ═══════════════════════════════════════════════════════════════════
    STAT CARDS
    ═══════════════════════════════════════════════════════════════════ */

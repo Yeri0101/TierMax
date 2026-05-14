@@ -4,7 +4,7 @@ import { fetchApi } from '../api';
 import {
     KeyRound, Server, ChevronLeft, Trash2, Plus, RefreshCw,
     Activity, Pause, Play, Zap, Shield, Download, AlertTriangle,
-    CheckCircle2, XCircle, Clock, Cpu, Sliders, Edit2, Save, X, DollarSign
+    CheckCircle2, XCircle, Clock, Cpu, Sliders, Edit2, Save, X, DollarSign, ChevronDown
 } from 'lucide-react';
 import { useLanguage } from '../i18n';
 
@@ -141,6 +141,7 @@ export default function ProjectDetail() {
     const [tokenLimitModal, setTokenLimitModal] = useState<{ mode: 'global' | 'single'; providerId?: string; providerName?: string } | null>(null);
     const [tokenLimitInput, setTokenLimitInput] = useState<string>('');
     const [providerEdit, setProviderEdit] = useState<Record<string, { api_key: string; billing_type: BillingType } | null>>({});
+    const [billingMenuOpen, setBillingMenuOpen] = useState(false);
 
     /* ─── Data loading ─── */
     const loadData = async () => {
@@ -262,6 +263,7 @@ export default function ProjectDetail() {
             });
             setProviders(prev => prev.map(p => ({ ...p, billing_type: billingType })));
             setProviderEdit({});
+            setBillingMenuOpen(false);
             loadRealtimeData();
         } catch (err: any) {
             alert(err.message || 'Failed to update provider billing types');
@@ -612,6 +614,16 @@ export default function ProjectDetail() {
     );
 
     const projColor = project.color || '#ff6b2b';
+    const paidProviderCount = providers.filter(p => (p.billing_type || 'paid') === 'paid').length;
+    const freeProviderCount = providers.filter(p => p.billing_type === 'free').length;
+    const billingSummary =
+        providers.length === 0
+            ? t('project.billing_none')
+            : paidProviderCount === providers.length
+                ? t('project.billing_all_paid')
+                : freeProviderCount === providers.length
+                    ? t('project.billing_all_free')
+                    : t('project.billing_mixed');
 
     /* ─── Main render ─── */
     return (
@@ -725,22 +737,27 @@ export default function ProjectDetail() {
                                     <Server size={11} /> {t('project.configured_providers')} ({providers.length})
                                 </div>
                                 <div className="panel-actions">
-                                    <button
-                                        onClick={() => handleSetAllProviderBilling('paid')}
-                                        className="btn btn-secondary btn-sm"
-                                        disabled={providers.length === 0}
-                                        title={t('project.billing_set_all_paid')}
-                                    >
-                                        <Shield size={13} /> {t('project.billing_all_paid')}
-                                    </button>
-                                    <button
-                                        onClick={() => handleSetAllProviderBilling('free')}
-                                        className="btn btn-success btn-sm"
-                                        disabled={providers.length === 0}
-                                        title={t('project.billing_set_all_free')}
-                                    >
-                                        <DollarSign size={13} /> {t('project.billing_all_free')}
-                                    </button>
+                                    <div className="billing-dropdown">
+                                        <button
+                                            onClick={() => setBillingMenuOpen(open => !open)}
+                                            className="btn btn-secondary btn-sm"
+                                            disabled={providers.length === 0}
+                                            title={t('project.billing_bulk_menu')}
+                                            type="button"
+                                        >
+                                            <DollarSign size={13} /> {billingSummary} <ChevronDown size={13} />
+                                        </button>
+                                        {billingMenuOpen && providers.length > 0 && (
+                                            <div className="billing-dropdown-menu">
+                                                <button type="button" onClick={() => handleSetAllProviderBilling('paid')}>
+                                                    <Shield size={13} /> {t('project.billing_set_all_paid')}
+                                                </button>
+                                                <button type="button" onClick={() => handleSetAllProviderBilling('free')}>
+                                                    <DollarSign size={13} /> {t('project.billing_set_all_free')}
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
                                     <button onClick={handlePauseAllProjectProviders} className="btn btn-warning btn-sm">
                                         <Pause size={13} /> Pause All
                                     </button>
