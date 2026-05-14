@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchApi } from '../api';
-import { FolderOpen, Plus, Trash2, Edit2, Zap, Palette, Key, Activity, Copy, Check } from 'lucide-react';
+import { FolderOpen, Plus, Trash2, Edit2, Zap, Palette, Key, Activity, Copy, Check, DollarSign } from 'lucide-react';
 import { useLanguage } from '../i18n';
 
 type GatewayKeyPreview = {
@@ -28,6 +28,12 @@ type RecentCall = {
     created_at: string;
 };
 
+type UsageMetrics = {
+    totalTokens: number;
+    actualCostUsd: number;
+    estimatedSavingsUsd: number;
+};
+
 const PROJECT_COLORS = [
     '#ff6b2b', // orange (default)
     '#ffaa00', // amber
@@ -38,6 +44,8 @@ const PROJECT_COLORS = [
     '#ec4899', // pink
     '#ef4444', // red
 ];
+
+const REFERENCE_COST_PER_1M_TOKENS_USD = 15;
 
 export default function Dashboard() {
     const { t } = useLanguage();
@@ -50,6 +58,11 @@ export default function Dashboard() {
     const [colorPickerId, setColorPickerId] = useState<string | null>(null);
     const [copiedKeyId, setCopiedKeyId] = useState<string | null>(null);
     const [hidingKeyId, setHidingKeyId] = useState<string | null>(null);
+    const [usageMetrics, setUsageMetrics] = useState<UsageMetrics>({
+        totalTokens: 0,
+        actualCostUsd: 0,
+        estimatedSavingsUsd: 0,
+    });
 
     const handleCopyKey = async (keyId: string, e: React.MouseEvent) => {
         e.preventDefault();
@@ -77,23 +90,36 @@ export default function Dashboard() {
                     try {
                         const analytics = await fetchApi(`/analytics/${project.id}`);
                         const projectRecentLogs = Array.isArray(analytics?.recentLogs) ? analytics.recentLogs : [];
-                        return projectRecentLogs.map((log: any) => ({
-                            project_id: project.id,
-                            project_name: project.name,
-                            model: log.model || '—',
-                            latency_ms: log.latency_ms ?? null,
-                            total_tokens: log.total_tokens ?? 0,
-                            created_at: log.created_at,
-                        }));
+                        return {
+                            totalTokens: Number(analytics?.stats?.totalTokens || 0),
+                            totalCostUsd: Number(analytics?.stats?.totalCostUsd || 0),
+                            logs: projectRecentLogs.map((log: any) => ({
+                                project_id: project.id,
+                                project_name: project.name,
+                                model: log.model || '—',
+                                latency_ms: log.latency_ms ?? null,
+                                total_tokens: log.total_tokens ?? 0,
+                                created_at: log.created_at,
+                            })),
+                        };
                     } catch (err) {
                         console.error(`Failed to load analytics for project ${project.id}:`, err);
-                        return [];
+                        return { totalTokens: 0, totalCostUsd: 0, logs: [] };
                     }
                 })
             );
 
+            const totalTokens = analyticsResponses.reduce((sum, item) => sum + item.totalTokens, 0);
+            const actualCostUsd = analyticsResponses.reduce((sum, item) => sum + item.totalCostUsd, 0);
+            const referenceCostUsd = (totalTokens / 1_000_000) * REFERENCE_COST_PER_1M_TOKENS_USD;
+            setUsageMetrics({
+                totalTokens,
+                actualCostUsd,
+                estimatedSavingsUsd: Math.max(referenceCostUsd - actualCostUsd, 0),
+            });
+
             const latestCalls = analyticsResponses
-                .flat()
+                .flatMap(item => item.logs)
                 .filter((log: RecentCall) => !!log.created_at)
                 .sort((a: RecentCall, b: RecentCall) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
                 .slice(0, 3);
@@ -102,6 +128,7 @@ export default function Dashboard() {
         } catch (err) {
             console.error(err);
             setRecentCalls([]);
+            setUsageMetrics({ totalTokens: 0, actualCostUsd: 0, estimatedSavingsUsd: 0 });
         } finally {
             setLoading(false);
         }
@@ -192,6 +219,22 @@ export default function Dashboard() {
         });
     };
 
+    const formatCompactNumber = (value: number) => {
+        return new Intl.NumberFormat([], {
+            notation: 'compact',
+            maximumFractionDigits: value >= 1_000_000 ? 1 : 0,
+        }).format(value);
+    };
+
+    const formatCurrency = (value: number) => {
+        return new Intl.NumberFormat([], {
+            style: 'currency',
+            currency: 'USD',
+            minimumFractionDigits: value >= 10 ? 2 : 4,
+            maximumFractionDigits: value >= 10 ? 2 : 4,
+        }).format(value);
+    };
+
     return (
         <div style={{ animation: 'fadeIn 0.3s ease-out' }}>
             {/* Page header */}
@@ -199,7 +242,7 @@ export default function Dashboard() {
                 className="flex items-center justify-between"
                 style={{ marginBottom: '2rem', gap: '1.25rem', alignItems: 'stretch', flexWrap: 'wrap' }}
             >
-                <div>
+                <div className="dashboard-hero-copy">
                     <div className="flex items-center gap-2" style={{ marginBottom: '0.35rem' }}>
                         <span style={{
                             display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
@@ -215,6 +258,30 @@ export default function Dashboard() {
                         {t('dashboard.title')}
                     </h1>
                     <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.2rem' }}>{t('dashboard.subtitle')}</p>
+
+                    <div className="usage-summary-card">
+                        <div className="usage-summary-metric">
+                            <div className="usage-summary-icon">
+                                <Activity size={15} />
+                            </div>
+                            <div>
+                                <div className="usage-summary-label">{t('dashboard.usage.tokens_spent')}</div>
+                                <div className="usage-summary-value">{formatCompactNumber(usageMetrics.totalTokens)}</div>
+                                <div className="usage-summary-detail">{usageMetrics.totalTokens.toLocaleString()} {t('dashboard.usage.total_tokens')}</div>
+                            </div>
+                        </div>
+                        <div className="usage-summary-divider" />
+                        <div className="usage-summary-metric">
+                            <div className="usage-summary-icon savings">
+                                <DollarSign size={15} />
+                            </div>
+                            <div>
+                                <div className="usage-summary-label">{t('dashboard.usage.money_saved')}</div>
+                                <div className="usage-summary-value green">{formatCurrency(usageMetrics.estimatedSavingsUsd)}</div>
+                                <div className="usage-summary-detail">{t('dashboard.usage.actual_cost')}: {formatCurrency(usageMetrics.actualCostUsd)}</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div className="recent-calls-panel">
