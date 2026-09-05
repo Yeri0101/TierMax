@@ -33,21 +33,22 @@ const PREMIUM_KEYWORDS = [
 const ECONOMY_TOKEN_LIMIT = 200;   // < 200 estimated tokens → Economy candidate
 const PREMIUM_TOKEN_LIMIT = 1500;  // > 1500 estimated tokens → Premium candidate
 
-// Rough token estimator: ~4 chars per token (good enough for routing decisions)
+// Conservative token estimator: ~3 chars per token for Spanish/JSON/Code plus a 15% safety buffer
 export function estimateTokenCount(messages: any[]): number {
     let total = 0;
     for (const msg of messages) {
         if (typeof msg.content === 'string') {
-            total += Math.ceil(msg.content.length / 4);
+            total += Math.ceil(msg.content.length / 3);
         } else if (Array.isArray(msg.content)) {
             for (const block of msg.content) {
-                if (block?.text) total += Math.ceil(block.text.length / 4);
+                if (block?.text) total += Math.ceil(block.text.length / 3);
             }
         }
         // Tool calls add overhead
         if (msg.tool_calls?.length) total += msg.tool_calls.length * 50;
     }
-    return total;
+    // Apply a 15% safety margin to ensure we never underestimate
+    return Math.ceil(total * 1.15);
 }
 
 function lastUserMessage(messages: any[]): string {

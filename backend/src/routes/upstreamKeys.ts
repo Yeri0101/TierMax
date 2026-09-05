@@ -220,7 +220,44 @@ upstreamKeys.get('/:id/models', async (c) => {
         // 2. Query provider API for models
         let url = '';
         if (keyData.provider === 'openai') url = 'https://api.openai.com/v1/models';
-        else if (keyData.provider === 'groq') url = 'https://api.groq.com/openai/v1/models';
+        else if (keyData.provider === 'groq') {
+            try {
+                const groqRes = await fetch('https://api.groq.com/openai/v1/models', {
+                    headers: { 'Authorization': `Bearer ${keyData.api_key}` }
+                });
+                if (groqRes.ok) {
+                    const groqData = await groqRes.json();
+                    const liveModels: any[] = (groqData.data || []).map((m: any) => ({ id: m.id }));
+                    const requiredGroq = [
+                        'qwen/qwen3.8-27b',
+                        'deepseek-r1-distill-llama-70b',
+                        'llama-3.3-70b-versatile',
+                        'qwen/qwen3.6-27b',
+                        'openai/gpt-oss-120b',
+                        'whisper-large-v3',
+                    ];
+                    for (const req of requiredGroq) {
+                        if (!liveModels.some((m: any) => m.id === req)) {
+                            liveModels.unshift({ id: req });
+                        }
+                    }
+                    return c.json({ models: liveModels });
+                }
+            } catch (err: any) {
+                console.warn(`[Models] Groq API error (${err.message}) — using curated fallback list`);
+            }
+            return c.json({
+                models: [
+                    { id: 'qwen/qwen3.8-27b' },
+                    { id: 'deepseek-r1-distill-llama-70b' },
+                    { id: 'llama-3.3-70b-versatile' },
+                    { id: 'qwen/qwen3.6-27b' },
+                    { id: 'openai/gpt-oss-120b' },
+                    { id: 'groq/compound' },
+                    { id: 'whisper-large-v3' },
+                ]
+            });
+        }
         else if (keyData.provider === 'openrouter') url = 'https://openrouter.ai/api/v1/models';
         else if (keyData.provider === 'mimo') url = 'https://api.xiaomimimo.com/v1/models';
         else if (keyData.provider === 'cerebras') url = 'https://api.cerebras.ai/v1/models';
@@ -329,7 +366,19 @@ upstreamKeys.get('/:id/models', async (c) => {
                 });
                 if (nvidiaRes.ok) {
                     const nvidiaData = await nvidiaRes.json();
-                    const models = nvidiaData.data || [];
+                    const models: any[] = (nvidiaData.data || []).map((m: any) => ({ id: m.id }));
+                    const requiredNvidia = [
+                        'moonshotai/kimi-k3',
+                        'minimaxai/minimax-m3',
+                        'meta/llama-3.3-70b-instruct',
+                        'deepseek-ai/deepseek-v4-flash-0731',
+                        'google/gemma-4-31b-it',
+                    ];
+                    for (const req of requiredNvidia) {
+                        if (!models.some((m: any) => m.id === req)) {
+                            models.unshift({ id: req });
+                        }
+                    }
                     if (models.length > 0) return c.json({ models });
                 }
                 console.warn(`[Models] NVIDIA API returned ${nvidiaRes.status} — using curated fallback list`);
@@ -339,30 +388,16 @@ upstreamKeys.get('/:id/models', async (c) => {
             // Curated list of popular NVIDIA NIM models
             return c.json({
                 models: [
-                    // Moonshot / Kimi
-                    { id: 'moonshotai/kimi-k2.5' },
-                    // Meta Llama
+                    { id: 'moonshotai/kimi-k3' },
+                    { id: 'minimaxai/minimax-m3' },
                     { id: 'meta/llama-3.3-70b-instruct' },
-                    { id: 'meta/llama-3.1-405b-instruct' },
-                    { id: 'meta/llama-3.1-70b-instruct' },
-                    { id: 'meta/llama-3.1-8b-instruct' },
-                    // Mistral
-                    { id: 'mistralai/mistral-large-2-instruct' },
-                    { id: 'mistralai/mixtral-8x22b-instruct-v0.1' },
-                    // Google
-                    { id: 'google/gemma-3-27b-it' },
-                    { id: 'google/gemma-3-4b-it' },
-                    // NVIDIA
-                    { id: 'nvidia/llama-3.1-nemotron-ultra-253b-v1' },
+                    { id: 'deepseek-ai/deepseek-v4-flash-0731' },
+                    { id: 'google/gemma-4-31b-it' },
+                    { id: 'moonshotai/kimi-k2.6' },
                     { id: 'nvidia/llama-3.1-nemotron-70b-instruct' },
-                    // DeepSeek
                     { id: 'deepseek-ai/deepseek-r1' },
                     { id: 'deepseek-ai/deepseek-v3' },
-                    // Qwen
                     { id: 'qwen/qwen3-235b-a22b' },
-                    { id: 'qwen/qwq-32b' },
-                    // Microsoft
-                    { id: 'microsoft/phi-4-reasoning-plus' },
                 ]
             });
         }
@@ -476,12 +511,11 @@ upstreamKeys.get('/:id/models', async (c) => {
             // Source: https://api-docs.deepseek.com/api/list-models
             return c.json({
                 models: [
-                    // ── Current models ──
-                    { id: 'deepseek-v4-flash' },   // non-thinking mode (replaces deepseek-chat)
-                    { id: 'deepseek-v4-pro' },      // advanced reasoning model
-                    // ── Legacy (deprecated 2026-07-24) ──
-                    { id: 'deepseek-chat' },         // alias → deepseek-v4-flash non-thinking
-                    { id: 'deepseek-reasoner' },     // alias → deepseek-v4-flash thinking
+                    { id: 'deepseek-chat' },
+                    { id: 'deepseek-coder' },
+                    { id: 'deepseek-reasoner' },
+                    { id: 'deepseek-v4-flash' },
+                    { id: 'deepseek-v4-pro' },
                 ]
             });
         }
@@ -527,14 +561,15 @@ upstreamKeys.post('/:id/test', async (c) => {
 
         if (['openai', 'openrouter', 'groq', 'cerebras', 'mistral', 'nvidia', 'vercel', 'minimax', 'moonshot', 'deepseek', 'kie', 'zettacore', 'mimo'].includes(keyData.provider)) {
             if (keyData.provider === 'openai') { url = 'https://api.openai.com/v1/chat/completions'; model = 'gpt-3.5-turbo'; }
-            else if (keyData.provider === 'groq') { url = 'https://api.groq.com/openai/v1/chat/completions'; model = 'gemma2-9b-it'; }
+            else if (keyData.provider === 'groq') { url = 'https://api.groq.com/openai/v1/chat/completions'; model = 'qwen/qwen3.8-27b'; }
             else if (keyData.provider === 'openrouter') { url = 'https://openrouter.ai/api/v1/chat/completions'; model = 'google/gemini-2.5-flash-preview'; }
             else if (keyData.provider === 'cerebras') { url = 'https://api.cerebras.ai/v1/chat/completions'; model = 'llama3.1-8b'; }
             else if (keyData.provider === 'mistral') { url = 'https://api.mistral.ai/v1/chat/completions'; model = 'mistral-small-latest'; }
-            else if (keyData.provider === 'nvidia') { url = 'https://integrate.api.nvidia.com/v1/chat/completions'; model = 'meta/llama3-8b-instruct'; }
+            else if (keyData.provider === 'nvidia') { url = 'https://integrate.api.nvidia.com/v1/chat/completions'; model = 'moonshotai/kimi-k3'; }
             else if (keyData.provider === 'minimax') { url = 'https://api.minimax.chat/v1/chat/completions'; model = 'minimax-text-01'; }
             else if (keyData.provider === 'moonshot') { url = 'https://api.moonshot.cn/v1/chat/completions'; model = 'moonshot-v1-8k'; }
             else if (keyData.provider === 'deepseek') { url = 'https://api.deepseek.com/chat/completions'; model = 'deepseek-chat'; }
+
             else if (keyData.provider === 'mimo') { url = 'https://api.xiaomimimo.com/v1/chat/completions'; model = 'mimo-v2-pro'; }
             else if (keyData.provider === 'vercel') { url = 'https://ai-gateway.vercel.sh/v1/chat/completions'; model = 'gpt-3.5-turbo'; }
             else if (keyData.provider === 'kie') { url = 'https://api.kie.ai/gemini-1.5-flash/v1/chat/completions'; model = 'gemini-1.5-flash'; }

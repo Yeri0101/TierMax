@@ -32,6 +32,9 @@ app.route('/api/analytics', analyticsRoute);
 app.route('/api/batch', batchRoute);
 app.route('/api/pricing', pricingRoute);
 app.route('/v1', v1Route);
+// Compatibility aliases for clients setting baseUrl with/without /v1
+app.route('/v1/v1', v1Route);
+app.all('/messages', (c) => v1Route.fetch(c.req.raw));
 
 app.get('/', (c) => {
     return c.json({ message: 'OpenClaw API Gateway Running' });

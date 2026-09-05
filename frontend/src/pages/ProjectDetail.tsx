@@ -18,6 +18,9 @@ type PricingEntry = {
     input_price_per_1m: number | string;
     output_price_per_1m: number | string;
     is_active: boolean;
+    source?: string | null;
+    is_manual_override?: boolean;
+    synced_at?: string | null;
 };
 
 interface RequestLog {
@@ -51,6 +54,7 @@ const PROVIDER_STYLES: Record<string, { cls: string; abbr: string }> = {
     nvidia: { cls: 'provider-nvidia', abbr: 'NV' },
     vercel: { cls: 'provider-vercel', abbr: 'VL' },
     moonshot: { cls: 'provider-moonshot', abbr: 'KM' },
+    minimax: { cls: 'provider-minimax', abbr: 'MX' },
     deepseek: { cls: 'provider-deepseek', abbr: 'DS' },
     mimo: { cls: 'provider-default', abbr: 'MM' },
     zettacore: { cls: 'provider-default', abbr: 'ZC' },
@@ -123,10 +127,18 @@ export default function ProjectDetail() {
     const [testModels, setTestModels] = useState<Record<string, string>>({});
     const [testResults, setTestResults] = useState<Record<string, any>>({});
     const [testLoading, setTestLoading] = useState<Record<string, boolean>>({});
+    // Audio test state
+    const [audioFiles, setAudioFiles] = useState<Record<string, File | null>>({});
+    const [audioRecording, setAudioRecording] = useState<Record<string, boolean>>({});
+    const [mediaRecorders, setMediaRecorders] = useState<Record<string, MediaRecorder | null>>({});
+    const [_audioChunks, setAudioChunks] = useState<Record<string, Blob[]>>({});
+    const [ttsVoice, setTtsVoice] = useState<Record<string, string>>({});
 
     const [recentRequests, setRecentRequests] = useState<RequestLog[]>([]);
     const [pricingEntries, setPricingEntries] = useState<PricingEntry[]>([]);
     const [pricingForm, setPricingForm] = useState({ id: '', provider: '*', model_name: '', input_price_per_1m: '', output_price_per_1m: '' });
+    const [pricingSyncing, setPricingSyncing] = useState(false);
+    const [pricingSyncSummary, setPricingSyncSummary] = useState<string | null>(null);
     const [budgetInput, setBudgetInput] = useState('');
     const [budgetAlertThresholdInput, setBudgetAlertThresholdInput] = useState('80');
 
@@ -467,27 +479,225 @@ export default function ProjectDetail() {
         catch { alert('Failed to delete model'); }
     };
 
+    // Helpers to classify model type
+    const isSttModel = (model: string) => /whisper|transcri/i.test(model);
+    const isTtsModel = (model: string) => /[\-_]tts[\-_]?|voxtral.*tts|tts.*preview/i.test(model);
+
+    // ── Voice recording helpers ─────────────────────────────────────────
+    const startRecording = async (gwId: string) => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+            const chunks: Blob[] = [];
+            recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+            recorder.onstop = () => {
+                const blob = new Blob(chunks, { type: 'audio/webm' });
+                const file = new File([blob], 'recording.webm', { type: 'audio/webm' });
+                setAudioFiles(prev => ({ ...prev, [gwId]: file }));
+                stream.getTracks().forEach(t => t.stop());
+            };
+            recorder.start();
+            setMediaRecorders(prev => ({ ...prev, [gwId]: recorder }));
+            setAudioChunks(prev => ({ ...prev, [gwId]: chunks }));
+            setAudioRecording(prev => ({ ...prev, [gwId]: true }));
+        } catch {
+            alert('No se pudo acceder al micrófono. Verifica los permisos del navegador.');
+        }
+    };
+
+    const stopRecording = (gwId: string) => {
+        mediaRecorders[gwId]?.stop();
+        setAudioRecording(prev => ({ ...prev, [gwId]: false }));
+    };
+
+    // ── Main test handler ───────────────────────────────────────────────
     const handleTestKey = async (gatewayKey: GatewayKey) => {
-        const prompt = testPrompts[gatewayKey.id];
         const model = testModels[gatewayKey.id] || gatewayKey.gateway_key_models?.[0]?.model_name;
-        if (!prompt || !model) { alert('Please enter a prompt and select a model.'); return; }
+        if (!model) { alert('Selecciona un modelo primero.'); return; }
+        const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:3000' : window.location.origin;
+
         setTestLoading(prev => ({ ...prev, [gatewayKey.id]: true }));
         setTestResults(prev => ({ ...prev, [gatewayKey.id]: null }));
+
         try {
-            const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:3000' : window.location.origin;
-            const res = await fetch(`${baseUrl}/v1/chat/completions`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${gatewayKey.api_key}` },
-                body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }] }),
-            });
-            const data = await res.json();
-            setTestResults(prev => ({ ...prev, [gatewayKey.id]: { status: res.status, data } }));
+            // ── STT: speech-to-text ─────────────────────────────────────
+            if (isSttModel(model)) {
+                const audioFile = audioFiles[gatewayKey.id];
+                if (!audioFile) {
+                    alert('Graba o sube un archivo de audio primero.');
+                    setTestLoading(prev => ({ ...prev, [gatewayKey.id]: false }));
+                    return;
+                }
+                const form = new FormData();
+                form.set('model', model);
+                form.set('file', audioFile, audioFile.name);
+                const res = await fetch(`${baseUrl}/v1/audio/transcriptions`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${gatewayKey.api_key}` },
+                    body: form,
+                });
+                const data = await res.json();
+                setTestResults(prev => ({ ...prev, [gatewayKey.id]: { status: res.status, data, type: 'stt' } }));
+
+            // ── TTS: text-to-speech ─────────────────────────────────────
+            } else if (isTtsModel(model)) {
+                const input = testPrompts[gatewayKey.id];
+                if (!input) { alert('Escribe el texto a convertir en voz.'); setTestLoading(prev => ({ ...prev, [gatewayKey.id]: false })); return; }
+                const voice = ttsVoice[gatewayKey.id] || 'alloy';
+                const res = await fetch(`${baseUrl}/v1/audio/speech`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${gatewayKey.api_key}` },
+                    body: JSON.stringify({ model, input, voice, response_format: 'mp3' }),
+                });
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({ error: { message: 'Error desconocido' } }));
+                    setTestResults(prev => ({ ...prev, [gatewayKey.id]: { status: res.status, data: errData, type: 'tts' } }));
+                } else {
+                    const audioBlob = await res.blob();
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    setTestResults(prev => ({ ...prev, [gatewayKey.id]: { status: 200, audioUrl, type: 'tts' } }));
+                }
+
+            // ── Chat completions ────────────────────────────────────────
+            } else {
+                const prompt = testPrompts[gatewayKey.id];
+                if (!prompt) { alert('Escribe un mensaje de prueba.'); setTestLoading(prev => ({ ...prev, [gatewayKey.id]: false })); return; }
+                const res = await fetch(`${baseUrl}/v1/chat/completions`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${gatewayKey.api_key}` },
+                    body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }] }),
+                });
+                const data = await res.json();
+                setTestResults(prev => ({ ...prev, [gatewayKey.id]: { status: res.status, data, type: 'chat' } }));
+            }
             loadData();
         } catch (err: any) {
             setTestResults(prev => ({ ...prev, [gatewayKey.id]: { status: 500, error: err.message } }));
         } finally {
             setTestLoading(prev => ({ ...prev, [gatewayKey.id]: false }));
         }
+    };
+
+    // ── Render test result by type ──────────────────────────────────────
+    const renderTestResult = (gwId: string) => {
+        const r = testResults[gwId];
+        if (!r) return null;
+
+        // STT result: show transcription text
+        if (r.type === 'stt') {
+            return (
+                <div className="test-result" style={{ borderColor: r.status === 200 ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)' }}>
+                    <div className="test-result-header">
+                        <div className="flex items-center gap-2">
+                            {r.status === 200 ? <CheckCircle2 size={14} style={{ color: 'var(--status-healthy)' }} /> : <XCircle size={14} style={{ color: 'var(--status-error)' }} />}
+                            <span style={{ fontSize: '0.8rem', fontWeight: 700, fontFamily: 'var(--font-mono)', color: r.status === 200 ? '#22c55e' : '#ef4444' }}>
+                                {r.status === 200 ? '🎤 Transcripción' : `HTTP ${r.status}`}
+                            </span>
+                        </div>
+                    </div>
+                    <div className="test-result-body" style={{ color: r.status === 200 ? 'var(--text-primary)' : '#ef4444' }}>
+                        {r.status === 200 ? (r.data?.text || JSON.stringify(r.data, null, 2)) : JSON.stringify(r.data, null, 2)}
+                    </div>
+                </div>
+            );
+        }
+
+        // TTS result: inline audio player
+        if (r.type === 'tts') {
+            return (
+                <div className="test-result" style={{ borderColor: r.status === 200 ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)' }}>
+                    <div className="test-result-header">
+                        <div className="flex items-center gap-2">
+                            {r.status === 200 ? <CheckCircle2 size={14} style={{ color: 'var(--status-healthy)' }} /> : <XCircle size={14} style={{ color: 'var(--status-error)' }} />}
+                            <span style={{ fontSize: '0.8rem', fontWeight: 700, fontFamily: 'var(--font-mono)', color: r.status === 200 ? '#22c55e' : '#ef4444' }}>
+                                {r.status === 200 ? '🔊 Audio generado' : `HTTP ${r.status}`}
+                            </span>
+                        </div>
+                    </div>
+                    <div className="test-result-body">
+                        {r.audioUrl
+                            ? <audio controls src={r.audioUrl} style={{ width: '100%' }} autoPlay />
+                            : <pre style={{ margin: 0 }}>{JSON.stringify(r.data, null, 2)}</pre>}
+                    </div>
+                </div>
+            );
+        }
+
+        // Chat / generic HTTP result
+        const meta = r.data?._openclaw_metadata;
+        const cfg = meta ? (PROVIDER_STYLES[meta.provider] ?? { cls: 'provider-default', abbr: (meta.provider || '??').slice(0, 2).toUpperCase() }) : null;
+        return (
+            <div className="test-result" style={{ borderColor: r.status === 200 ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)' }}>
+                <div className="test-result-header">
+                    <div className="flex items-center gap-2" style={{ flexWrap: 'wrap' }}>
+                        {r.status === 200 ? <CheckCircle2 size={14} style={{ color: 'var(--status-healthy)' }} /> : <XCircle size={14} style={{ color: 'var(--status-error)' }} />}
+                        <span style={{ fontSize: '0.8rem', fontWeight: 700, fontFamily: 'var(--font-mono)', color: r.status === 200 ? '#22c55e' : '#ef4444' }}>
+                            HTTP {r.status}
+                        </span>
+                        {meta && cfg && (
+                            <>
+                                <div className="provider-chip" style={{ fontSize: '0.7rem' }}>
+                                    <div className={`provider-icon ${cfg.cls}`} style={{ width: 18, height: 18, fontSize: '0.55rem' }}>{cfg.abbr}</div>
+                                    <span style={{ textTransform: 'capitalize' }}>{meta.provider}</span>
+                                </div>
+                                {meta.upstream_key_id && (
+                                    <code style={{ fontSize: '0.7rem', fontFamily: 'var(--font-mono)', color: 'var(--brand-amber)', background: 'rgba(255,170,0,0.08)', padding: '0.1rem 0.4rem', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(255,170,0,0.2)' }}>
+                                        {meta.upstream_key_id.split('-')[0]}…
+                                    </code>
+                                )}
+                            </>
+                        )}
+                    </div>
+                    <button
+                        onClick={() => setTestResults(prev => ({ ...prev, [gwId]: { ...prev[gwId], showRaw: !prev[gwId].showRaw } }))}
+                        style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.72rem', textDecoration: 'underline', fontFamily: 'var(--font-mono)', flexShrink: 0 }}
+                    >
+                        {r.showRaw ? 'formatted' : 'raw json'}
+                    </button>
+                </div>
+                <div className="test-result-body">
+                    {r.status === 200 && !r.showRaw && r.data?.choices?.[0]?.message?.content
+                        ? r.data.choices[0].message.content
+                        : JSON.stringify(r.data || r.error, null, 2)}
+                </div>
+            </div>
+        );
+    };
+
+    // ── Render model multi-selector for gateway key creation form ────────
+    const renderModelSelector = () => {
+        if (availableModels.length === 0) {
+            return <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{t('project.no_models')}</p>;
+        }
+        const allModelIds = Array.from(new Set(availableModels.flatMap(am => am.models.map(m => m.id)))).sort();
+        const uniqueSelected = Array.from(new Set(selectedModels.map(sm => sm.model_name)));
+        return (
+            <div>
+                <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>Ctrl/Cmd para selección múltiple</p>
+                <input
+                    type="text"
+                    placeholder="Buscar modelos..."
+                    value={createModelSearch}
+                    onChange={e => setCreateModelSearch(e.target.value)}
+                    style={{ width: '100%', marginBottom: '0.5rem', padding: '0.5rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-default)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '0.8rem' }}
+                />
+                <select
+                    multiple
+                    value={uniqueSelected}
+                    onChange={e => {
+                        const vals = Array.from(e.target.selectedOptions, o => o.value);
+                        const newSel: { upstream_key_id: string; model_name: string }[] = [];
+                        vals.forEach(mn => availableModels.forEach(am => {
+                            if (am.models.some(m => m.id === mn)) newSel.push({ upstream_key_id: am.upstream_key_id, model_name: mn });
+                        }));
+                        setSelectedModels(newSel);
+                    }}
+                    style={{ width: '100%', minHeight: 160, padding: '0.4rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-default)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '0.8rem', fontFamily: 'var(--font-mono)' }}
+                >
+                    {allModelIds.filter(mid => mid.toLowerCase().includes(createModelSearch.toLowerCase())).map(mid => <option key={mid} value={mid}>{mid}</option>)}
+                </select>
+            </div>
+        );
     };
 
     const handleClearAnalytics = async () => {
@@ -596,6 +806,20 @@ export default function ProjectDetail() {
         }
     };
 
+    const handleSyncLiteLlmPricing = async () => {
+        try {
+            setPricingSyncing(true);
+            setPricingSyncSummary(null);
+            const result = await fetchApi('/pricing/sync-litellm', { method: 'POST' });
+            setPricingEntries(await fetchApi('/pricing'));
+            setPricingSyncSummary(`Synced ${result.synced} LiteLLM prices. Skipped ${result.skipped_manual_overrides} manual overrides.`);
+        } catch (err: any) {
+            alert(err.message || 'Failed to sync LiteLLM pricing');
+        } finally {
+            setPricingSyncing(false);
+        }
+    };
+
     /* ─── Render guards ─── */
     if (loading) {
         return (
@@ -693,6 +917,8 @@ export default function ProjectDetail() {
                                     <option value="vertex">Vertex AI (via AI Studio)</option>
                                     <option value="anthropic">Anthropic</option>
                                     <option value="deepseek">DeepSeek</option>
+                                    <option value="moonshot">Moonshot AI (Kimi)</option>
+                                    <option value="minimax">MiniMax AI</option>
                                     <option value="kie">Kie (Gemini vía Kie)</option>
                                     <option value="cerebras">Cerebras</option>
                                     <option value="nvidia">NVIDIA NIM</option>
@@ -968,37 +1194,7 @@ export default function ProjectDetail() {
                                 <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
                                     {t('project.select_models')}
                                 </label>
-                                {availableModels.length > 0 ? (() => {
-                                    const allModelIds = Array.from(new Set(availableModels.flatMap(am => am.models.map(m => m.id)))).sort();
-                                    const uniqueSelected = Array.from(new Set(selectedModels.map(sm => sm.model_name)));
-                                    return (
-                                        <div>
-                                            <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>Ctrl/Cmd para selección múltiple</p>
-                                            <input
-                                                type="text"
-                                                placeholder="Buscar modelos..."
-                                                value={createModelSearch}
-                                                onChange={e => setCreateModelSearch(e.target.value)}
-                                                style={{ width: '100%', marginBottom: '0.5rem', padding: '0.5rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-default)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '0.8rem' }}
-                                            />
-                                            <select
-                                                multiple
-                                                value={uniqueSelected}
-                                                onChange={e => {
-                                                    const vals = Array.from(e.target.selectedOptions, o => o.value);
-                                                    const newSel: { upstream_key_id: string; model_name: string }[] = [];
-                                                    vals.forEach(mn => availableModels.forEach(am => {
-                                                        if (am.models.some(m => m.id === mn)) newSel.push({ upstream_key_id: am.upstream_key_id, model_name: mn });
-                                                    }));
-                                                    setSelectedModels(newSel);
-                                                }}
-                                                style={{ width: '100%', minHeight: 160, padding: '0.4rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-default)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '0.8rem', fontFamily: 'var(--font-mono)' }}
-                                            >
-                                                {allModelIds.filter(mid => mid.toLowerCase().includes(createModelSearch.toLowerCase())).map(mid => <option key={mid} value={mid}>{mid}</option>)}
-                                            </select>
-                                        </div>
-                                    );
-                                })() : <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{t('project.no_models')}</p>}
+                                {renderModelSelector()}
                             </div>
 
                             <button type="submit" className="btn btn-primary w-full">
@@ -1119,6 +1315,7 @@ export default function ProjectDetail() {
                                                 <div className="section-label" style={{ marginBottom: '0.75rem' }}>
                                                     <Zap size={10} /> {t('project.test_gateway')}
                                                 </div>
+                                                {/* Model selector */}
                                                 <select
                                                     value={testModels[g.id] || ''}
                                                     onChange={e => setTestModels(prev => ({ ...prev, [g.id]: e.target.value }))}
@@ -1129,56 +1326,81 @@ export default function ProjectDetail() {
                                                         <option key={i} value={mn}>{mn}</option>
                                                     ))}
                                                 </select>
-                                                <textarea
-                                                    placeholder={t('project.test_prompt_ph')}
-                                                    value={testPrompts[g.id] || ''}
-                                                    onChange={e => setTestPrompts(prev => ({ ...prev, [g.id]: e.target.value }))}
-                                                    style={{ width: '100%', padding: '0.625rem 0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-default)', background: 'var(--bg-primary)', color: 'var(--text-primary)', minHeight: 64, marginBottom: '0.5rem', fontSize: '0.875rem', fontFamily: 'var(--font-sans)', resize: 'vertical', outline: 'none' }}
-                                                />
+
+                                                {/* ── STT: record or upload audio ── */}
+                                                {isSttModel(testModels[g.id] || g.gateway_key_models?.[0]?.model_name || '') ? (
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                                                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                                            {/* Mic button */}
+                                                            {!audioRecording[g.id] ? (
+                                                                <button
+                                                                    onClick={() => startRecording(g.id)}
+                                                                    className="btn btn-sm"
+                                                                    style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.35)', color: '#f87171', display: 'flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'nowrap' }}
+                                                                >
+                                                                    🎙️ Grabar
+                                                                </button>
+                                                            ) : (
+                                                                <button
+                                                                    onClick={() => stopRecording(g.id)}
+                                                                    className="btn btn-sm"
+                                                                    style={{ background: 'rgba(239,68,68,0.25)', border: '1px solid rgba(239,68,68,0.6)', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '0.4rem', animation: 'pulse 1s infinite', whiteSpace: 'nowrap' }}
+                                                                >
+                                                                    ⏹ Detener
+                                                                </button>
+                                                            )}
+                                                            {/* File upload */}
+                                                            <label style={{ flex: 1, cursor: 'pointer', border: '1px dashed var(--border-default)', borderRadius: 'var(--radius-md)', padding: '0.45rem 0.75rem', fontSize: '0.78rem', color: 'var(--text-muted)', background: 'var(--bg-primary)', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                                {audioFiles[g.id] ? `📎 ${audioFiles[g.id]!.name}` : '+ Subir audio (mp3/wav/webm)'}
+                                                                <input type="file" accept="audio/*" style={{ display: 'none' }} onChange={e => {
+                                                                    const file = e.target.files?.[0] || null;
+                                                                    setAudioFiles(prev => ({ ...prev, [g.id]: file }));
+                                                                }} />
+                                                            </label>
+                                                        </div>
+                                                        {/* Audio preview */}
+                                                        {audioFiles[g.id] && (
+                                                            <audio controls src={URL.createObjectURL(audioFiles[g.id]!)} style={{ width: '100%', height: 32 }} />
+                                                        )}
+                                                    </div>
+                                                ) : isTtsModel(testModels[g.id] || g.gateway_key_models?.[0]?.model_name || '') ? (
+                                                    /* ── TTS: text input + voice selector ── */
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                                                        <textarea
+                                                            placeholder="Texto a convertir en voz..."
+                                                            value={testPrompts[g.id] || ''}
+                                                            onChange={e => setTestPrompts(prev => ({ ...prev, [g.id]: e.target.value }))}
+                                                            style={{ width: '100%', padding: '0.625rem 0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-default)', background: 'var(--bg-primary)', color: 'var(--text-primary)', minHeight: 64, fontSize: '0.875rem', fontFamily: 'var(--font-sans)', resize: 'vertical', outline: 'none' }}
+                                                        />
+                                                        <select
+                                                            value={ttsVoice[g.id] || 'alloy'}
+                                                            onChange={e => setTtsVoice(prev => ({ ...prev, [g.id]: e.target.value }))}
+                                                            style={{ width: '100%', padding: '0.45rem 0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-default)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '0.82rem', outline: 'none' }}
+                                                        >
+                                                            <option value="alloy">alloy</option>
+                                                            <option value="echo">echo</option>
+                                                            <option value="fable">fable</option>
+                                                            <option value="onyx">onyx</option>
+                                                            <option value="nova">nova</option>
+                                                            <option value="shimmer">shimmer</option>
+                                                        </select>
+                                                    </div>
+                                                ) : (
+                                                    /* ── Chat: text prompt ── */
+                                                    <textarea
+                                                        placeholder={t('project.test_prompt_ph')}
+                                                        value={testPrompts[g.id] || ''}
+                                                        onChange={e => setTestPrompts(prev => ({ ...prev, [g.id]: e.target.value }))}
+                                                        style={{ width: '100%', padding: '0.625rem 0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-default)', background: 'var(--bg-primary)', color: 'var(--text-primary)', minHeight: 64, marginBottom: '0.5rem', fontSize: '0.875rem', fontFamily: 'var(--font-sans)', resize: 'vertical', outline: 'none' }}
+                                                    />
+                                                )}
+
                                                 <button onClick={() => handleTestKey(g)} className="btn btn-primary w-full" disabled={testLoading[g.id]}>
                                                     {testLoading[g.id] ? <><span className="spinner-ring" style={{ width: 14, height: 14, borderWidth: 2 }} /> {t('project.btn_testing')}</> : <><Zap size={14} /> {t('project.btn_test')}</>}
                                                 </button>
 
-                                                {testResults[g.id] && (
-                                                    <div className="test-result" style={{ borderColor: testResults[g.id].status === 200 ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)' }}>
-                                                        <div className="test-result-header">
-                                                            <div className="flex items-center gap-2" style={{ flexWrap: 'wrap' }}>
-                                                                {testResults[g.id].status === 200
-                                                                    ? <CheckCircle2 size={14} style={{ color: 'var(--status-healthy)' }} />
-                                                                    : <XCircle size={14} style={{ color: 'var(--status-error)' }} />}
-                                                                <span style={{ fontSize: '0.8rem', fontWeight: 700, fontFamily: 'var(--font-mono)', color: testResults[g.id].status === 200 ? '#22c55e' : '#ef4444' }}>
-                                                                    HTTP {testResults[g.id].status}
-                                                                </span>
-                                                                {testResults[g.id].data?._openclaw_metadata && (() => {
-                                                                    const meta = testResults[g.id].data._openclaw_metadata;
-                                                                    const cfg = PROVIDER_STYLES[meta.provider] ?? { cls: 'provider-default', abbr: (meta.provider || '??').slice(0, 2).toUpperCase() };
-                                                                    return (
-                                                                        <>
-                                                                            <div className="provider-chip" style={{ fontSize: '0.7rem' }}>
-                                                                                <div className={`provider-icon ${cfg.cls}`} style={{ width: 18, height: 18, fontSize: '0.55rem' }}>{cfg.abbr}</div>
-                                                                                <span style={{ textTransform: 'capitalize' }}>{meta.provider}</span>
-                                                                            </div>
-                                                                            {meta.upstream_key_id && (
-                                                                                <code style={{ fontSize: '0.7rem', fontFamily: 'var(--font-mono)', color: 'var(--brand-amber)', background: 'rgba(255,170,0,0.08)', padding: '0.1rem 0.4rem', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(255,170,0,0.2)' }}>
-                                                                                    {meta.upstream_key_id.split('-')[0]}…
-                                                                                </code>
-                                                                            )}
-                                                                        </>
-                                                                    );
-                                                                })()}
-                                                            </div>
-                                                            <button onClick={() => setTestResults(prev => ({ ...prev, [g.id]: { ...prev[g.id], showRaw: !prev[g.id].showRaw } }))}
-                                                                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.72rem', textDecoration: 'underline', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>
-                                                                {testResults[g.id].showRaw ? 'formatted' : 'raw json'}
-                                                            </button>
-                                                        </div>
-                                                        <div className="test-result-body">
-                                                            {testResults[g.id].status === 200 && !testResults[g.id].showRaw && testResults[g.id].data?.choices?.[0]?.message?.content
-                                                                ? testResults[g.id].data.choices[0].message.content
-                                                                : JSON.stringify(testResults[g.id].data || testResults[g.id].error, null, 2)}
-                                                        </div>
-                                                    </div>
-                                                )}
+                                                {/* ── Test results ── */}
+                                                {testResults[g.id] && renderTestResult(g.id)}
                                             </div>
                                         </div>
                                     ))}
@@ -1292,7 +1514,18 @@ export default function ProjectDetail() {
                         </div>
 
                         <div className="glass-panel" style={{ flex: 2, minWidth: 320 }}>
-                            <div className="section-label"><Cpu size={11} /> {t('project.analytics.model_pricing')}</div>
+                            <div className="flex justify-between items-center" style={{ marginBottom: '0.75rem', gap: '0.75rem', flexWrap: 'wrap' }}>
+                                <div className="section-label" style={{ marginBottom: 0 }}><Cpu size={11} /> {t('project.analytics.model_pricing')}</div>
+                                <button className="btn btn-secondary btn-sm" type="button" onClick={handleSyncLiteLlmPricing} disabled={pricingSyncing}>
+                                    <RefreshCw size={14} className={pricingSyncing ? 'spin' : ''} />
+                                    {pricingSyncing ? 'Syncing...' : 'Sync LiteLLM'}
+                                </button>
+                            </div>
+                            {pricingSyncSummary && (
+                                <div style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginBottom: '0.75rem' }}>
+                                    {pricingSyncSummary}
+                                </div>
+                            )}
                             <form onSubmit={handleSavePricing} style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr 1fr 1fr auto', gap: '0.65rem', marginBottom: '1rem', alignItems: 'end' }}>
                                 <div>
                                     <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.35rem' }}>Provider</label>
@@ -1323,13 +1556,14 @@ export default function ProjectDetail() {
                                             <th>Model</th>
                                             <th>{t('project.analytics.input_price')}</th>
                                             <th>{t('project.analytics.output_price')}</th>
+                                            <th>Source</th>
                                             <th>Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {pricingEntries.length === 0 ? (
                                             <tr>
-                                                <td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '1.25rem' }}>No pricing rules yet.</td>
+                                                <td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '1.25rem' }}>No pricing rules yet.</td>
                                             </tr>
                                         ) : pricingEntries.map((entry) => (
                                             <tr key={entry.id}>
@@ -1337,6 +1571,9 @@ export default function ProjectDetail() {
                                                 <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>{entry.model_name}</td>
                                                 <td style={{ fontFamily: 'var(--font-mono)' }}>{Number(entry.input_price_per_1m || 0).toFixed(6)}</td>
                                                 <td style={{ fontFamily: 'var(--font-mono)' }}>{Number(entry.output_price_per_1m || 0).toFixed(6)}</td>
+                                                <td style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                                                    {entry.is_manual_override ? 'manual' : (entry.source || 'manual')}
+                                                </td>
                                                 <td>
                                                     <div className="flex gap-2">
                                                         <button className="btn btn-secondary" style={{ padding: '0.35rem 0.55rem' }} onClick={() => handleEditPricing(entry)}>Edit</button>

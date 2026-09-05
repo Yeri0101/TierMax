@@ -1276,6 +1276,13 @@ select {
   border-color: rgba(77, 159, 255, 0.3);
 }
 
+/* MiniMax AI — vibrant violet/magenta */
+.provider-minimax {
+  background: #1a0026;
+  color: #d946ef;
+  border-color: rgba(217, 70, 239, 0.3);
+}
+
 .provider-default {
   background: var(--bg-elevated);
   color: var(--text-muted);
