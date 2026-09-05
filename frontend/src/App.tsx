@@ -153,35 +153,38 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               TierMax
               <span style={{
                 fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.06em',
-                background: 'rgba(255,107,43,0.15)', border: '1px solid rgba(255,107,43,0.35)',
-                color: 'var(--brand-orange)', borderRadius: '4px',
+                background: 'rgba(139,92,246,0.15)', border: '1px solid rgba(139,92,246,0.35)',
+                color: '#a78bfa', borderRadius: '4px',
                 padding: '0.05rem 0.35rem', lineHeight: 1.4,
-              }}>v2.1</span>
+              }}>v2.5 · Fusion & Anthropic</span>
             </div>
-            <div className="navbar-subtitle">Gateway · SOAT</div>
+            <div className="navbar-subtitle">Universal AI Gateway · SOAT</div>
           </div>
         </Link>
 
         {/* Center status chips */}
         {isLoggedIn && (
-          <div className="navbar-status flex items-center gap-3">
+          <div className="navbar-status flex items-center gap-2">
             <div style={{
               display: 'flex', alignItems: 'center', gap: '0.3rem',
               background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)',
-              borderRadius: 'var(--radius-pill)', padding: '0.25rem 0.65rem',
+              borderRadius: 'var(--radius-pill)', padding: '0.2rem 0.6rem',
               fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.06em', color: '#22c55e',
             }}>
               <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 5px #22c55e', animation: 'pulseGlow 2s infinite' }} />
               LIVE
             </div>
-            <div className="flex items-center gap-3" style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                <Zap size={10} style={{ color: 'var(--brand-orange)' }} /> FALLBACK
+            <div className="flex items-center gap-2" style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: '#c084fc', background: 'rgba(192,132,252,0.1)', padding: '0.15rem 0.45rem', borderRadius: '4px', border: '1px solid rgba(192,132,252,0.2)' }}>
+                <Layers size={10} /> FUSION
               </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: '#38bdf8', background: 'rgba(56,189,248,0.1)', padding: '0.15rem 0.45rem', borderRadius: '4px', border: '1px solid rgba(56,189,248,0.2)' }}>
+                <Zap size={10} /> ANTHROPIC WIRE
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                 <Shield size={10} style={{ color: 'var(--brand-amber)' }} /> ANTI-F200
               </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                 <Activity size={10} style={{ color: '#22c55e' }} /> LATENCY
               </span>
             </div>

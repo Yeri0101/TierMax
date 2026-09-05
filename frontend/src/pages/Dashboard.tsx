@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { fetchApi } from '../api';
-import { FolderOpen, Plus, Trash2, Edit2, Zap, Palette, Key, Activity, Copy, Check, DollarSign } from 'lucide-react';
+import { FolderOpen, Plus, Trash2, Edit2, Zap, Palette, Key, Activity, Copy, Check, DollarSign, Sparkles, Terminal, Layers, Cpu } from 'lucide-react';
 import { useLanguage } from '../i18n';
 
 type GatewayKeyPreview = {
@@ -62,6 +62,17 @@ export default function Dashboard() {
         actualCostUsd: 0,
         estimatedSavingsUsd: 0,
     });
+    const [copiedSnippet, setCopiedSnippet] = useState<string | null>(null);
+
+    const handleCopySnippet = async (text: string, id: string) => {
+        try {
+            await navigator.clipboard.writeText(text);
+            setCopiedSnippet(id);
+            setTimeout(() => setCopiedSnippet(null), 2500);
+        } catch (e) {
+            console.error('Failed to copy snippet:', e);
+        }
+    };
 
     const handleCopyKey = async (keyId: string, e: React.MouseEvent) => {
         e.preventDefault();
@@ -381,6 +392,130 @@ export default function Dashboard() {
                         <Plus size={15} /> {t('dashboard.btn_create')}
                     </button>
                 </form>
+            </div>
+
+            {/* ─── TierMax Superpowers & Modernized Architecture ─── */}
+            <div className="superpowers-container">
+                <div className="superpowers-header">
+                    <div className="flex items-center gap-2">
+                        <Sparkles size={18} style={{ color: 'var(--brand-orange)' }} />
+                        <h2 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0, letterSpacing: '-0.01em' }}>
+                            TierMax Architecture & Protocols
+                        </h2>
+                        <span style={{
+                            fontSize: '0.62rem', fontWeight: 800, letterSpacing: '0.06em',
+                            background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.3)',
+                            color: '#22c55e', borderRadius: '4px', padding: '0.1rem 0.4rem',
+                        }}>
+                            ACTIVE
+                        </span>
+                    </div>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        Inspirado en arquitecturas de alto rendimiento (freellmapi) · Multi-Proveedor Inteligente
+                    </span>
+                </div>
+
+                <div className="superpowers-grid">
+                    {/* Card 1: Anthropic Wire Protocol */}
+                    <div className="superpower-card">
+                        <div>
+                            <div className="superpower-top">
+                                <div className="flex items-center gap-2">
+                                    <div className="superpower-icon-box" style={{ background: 'rgba(56,189,248,0.12)', border: '1px solid rgba(56,189,248,0.25)', color: '#38bdf8' }}>
+                                        <Terminal size={17} />
+                                    </div>
+                                    <div>
+                                        <div className="superpower-title">Anthropic Wire Protocol</div>
+                                        <div style={{ fontSize: '0.68rem', color: '#38bdf8', fontFamily: 'var(--font-mono)' }}>POST /v1/messages</div>
+                                    </div>
+                                </div>
+                                <span className="superpower-badge" style={{ background: 'rgba(56,189,248,0.12)', color: '#38bdf8', border: '1px solid rgba(56,189,248,0.25)' }}>
+                                    Native SSE
+                                </span>
+                            </div>
+                            <p className="superpower-desc">
+                                Conexión directa con <strong>Claude Code CLI</strong>, <code>@anthropic-ai/sdk</code>, Aider y Cursor usando llaves <code>gk_...</code>. Streaming SSE estricto y mapeo bi-direccional.
+                            </p>
+                        </div>
+                        <div className="superpower-code-box">
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                export ANTHROPIC_BASE_URL="http://localhost:3000"
+                            </span>
+                            <button
+                                onClick={() => handleCopySnippet('export ANTHROPIC_BASE_URL="http://localhost:3000"', 'anthropic')}
+                                className="btn btn-secondary btn-icon"
+                                style={{ padding: '0.15rem 0.35rem', height: 24, width: 24, flexShrink: 0 }}
+                                title="Copiar comando Claude Code"
+                            >
+                                {copiedSnippet === 'anthropic' ? <Check size={12} style={{ color: '#22c55e' }} /> : <Copy size={12} />}
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Card 2: Virtual Multi-Model Fusion */}
+                    <div className="superpower-card">
+                        <div>
+                            <div className="superpower-top">
+                                <div className="flex items-center gap-2">
+                                    <div className="superpower-icon-box" style={{ background: 'rgba(192,132,252,0.12)', border: '1px solid rgba(192,132,252,0.25)', color: '#c084fc' }}>
+                                        <Layers size={17} />
+                                    </div>
+                                    <div>
+                                        <div className="superpower-title">Virtual Consensus Fusion</div>
+                                        <div style={{ fontSize: '0.68rem', color: '#c084fc', fontFamily: 'var(--font-mono)' }}>model: "fusion"</div>
+                                    </div>
+                                </div>
+                                <span className="superpower-badge" style={{ background: 'rgba(192,132,252,0.12)', color: '#c084fc', border: '1px solid rgba(192,132,252,0.25)' }}>
+                                    Consensus
+                                </span>
+                            </div>
+                            <p className="superpower-desc">
+                                Despacho paralelo a 3 modelos heterogéneos activos + síntesis dialéctica con modelo juez anti-alucinaciones y telemetría transparente <code>_openclaw_fusion</code>.
+                            </p>
+                        </div>
+                        <div className="superpower-code-box">
+                            <span>"model": "fusion"</span>
+                            <button
+                                onClick={() => handleCopySnippet('"model": "fusion"', 'fusion')}
+                                className="btn btn-secondary btn-icon"
+                                style={{ padding: '0.15rem 0.35rem', height: 24, width: 24, flexShrink: 0 }}
+                                title="Copiar nombre de modelo"
+                            >
+                                {copiedSnippet === 'fusion' ? <Check size={12} style={{ color: '#22c55e' }} /> : <Copy size={12} />}
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Card 3: Expanded Ecosystem */}
+                    <div className="superpower-card">
+                        <div>
+                            <div className="superpower-top">
+                                <div className="flex items-center gap-2">
+                                    <div className="superpower-icon-box" style={{ background: 'rgba(255,107,43,0.12)', border: '1px solid rgba(255,107,43,0.25)', color: 'var(--brand-orange)' }}>
+                                        <Cpu size={17} />
+                                    </div>
+                                    <div>
+                                        <div className="superpower-title">Ecosistema & Modelos</div>
+                                        <div style={{ fontSize: '0.68rem', color: 'var(--brand-orange)', fontFamily: 'var(--font-mono)' }}>16+ Proveedores</div>
+                                    </div>
+                                </div>
+                                <span className="superpower-badge" style={{ background: 'rgba(255,107,43,0.12)', color: 'var(--brand-orange)', border: '1px solid rgba(255,107,43,0.25)' }}>
+                                    Zero-Drop SOAT
+                                </span>
+                            </div>
+                            <p className="superpower-desc" style={{ marginBottom: '0.5rem' }}>
+                                Catálogo potenciado con <strong>Qwen 2.5</strong> (Groq), <strong>Kimi K3</strong> (Moonshot/NIM), <strong>MiniMax M3</strong> y <strong>DeepSeek Direct</strong> con auto-failover inteligente.
+                            </p>
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginTop: 'auto' }}>
+                            <span style={{ fontSize: '0.65rem', background: 'rgba(245,80,54,0.12)', color: '#f55036', padding: '0.15rem 0.45rem', borderRadius: '4px', border: '1px solid rgba(245,80,54,0.25)', fontWeight: 600 }}>Groq</span>
+                            <span style={{ fontSize: '0.65rem', background: 'rgba(118,185,0,0.12)', color: '#76b900', padding: '0.15rem 0.45rem', borderRadius: '4px', border: '1px solid rgba(118,185,0,0.25)', fontWeight: 600 }}>NVIDIA NIM</span>
+                            <span style={{ fontSize: '0.65rem', background: 'rgba(77,159,255,0.12)', color: '#4d9fff', padding: '0.15rem 0.45rem', borderRadius: '4px', border: '1px solid rgba(77,159,255,0.25)', fontWeight: 600 }}>DeepSeek</span>
+                            <span style={{ fontSize: '0.65rem', background: 'rgba(0,212,212,0.12)', color: '#00d4d4', padding: '0.15rem 0.45rem', borderRadius: '4px', border: '1px solid rgba(0,212,212,0.25)', fontWeight: 600 }}>Moonshot Kimi</span>
+                            <span style={{ fontSize: '0.65rem', background: 'rgba(217,70,239,0.12)', color: '#d946ef', padding: '0.15rem 0.45rem', borderRadius: '4px', border: '1px solid rgba(217,70,239,0.25)', fontWeight: 600 }}>MiniMax AI</span>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             {/* Section label */}
