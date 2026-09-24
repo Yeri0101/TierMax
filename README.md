@@ -1,137 +1,61 @@
 <div align="center">
 
-# TierMax — free-llm-gateway
+# TierMax — Autonomous AI Gateway & Model Orchestrator
 
-**A self-hosted AI API gateway with smart routing, automatic failover, round-robin load balancing, semantic caching, and a real-time web dashboard.**
+**A high-performance, self-hosted AI API gateway with smart routing, virtual consensus fusion, proactive rate-limit guardian, self-healing model deprecation, and zero-config local database.**
 
-[![Version](https://img.shields.io/badge/version-2.2-orange?style=flat-square)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-3.0-orange?style=flat-square)](./CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](./LICENSE)
-[![Stack](https://img.shields.io/badge/stack-Node.js%20%7C%20React%20%7C%20Supabase-blueviolet?style=flat-square)](#tech-stack)
+[![Database](https://img.shields.io/badge/database-SQLite%20(Local)%20%7C%20Supabase-success?style=flat-square)](#-multi-database-architecture-sqlite--supabase)
+[![Docker](https://img.shields.io/badge/docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white)](#option-2-docker-compose-1-command)
+[![API](https://img.shields.io/badge/API-OpenAI%20Compatible-green?style=flat-square)](#usage)
 
 </div>
 
 ---
 
-## What is TierMax?
+## 🌟 What is TierMax?
 
-TierMax is a reverse proxy you self-host that sits between your AI applications and the LLM providers you use — Google Gemini, Groq, OpenRouter, Cerebras, Mistral, and others.
+**TierMax** is an enterprise-grade AI reverse proxy and autonomous model orchestrator designed to sit between your AI applications (such as [OpenClaw](https://github.com/Yeri0101/openclaw-bridge), Cursor, Cline, LangChain, or custom autonomous agents) and multiple upstream LLM providers — Google Gemini, Groq, OpenRouter, Cerebras, Mistral, OpenAI, DeepSeek, Puter, and more.
 
-Instead of hardcoding a single API key per provider and hoping it doesn't rate-limit, TierMax manages a **pool of upstream keys**, routes requests intelligently based on cost and complexity (via the built-in SOAT router), retries failed providers automatically, and caches duplicate responses so you don't waste tokens.
+Instead of hardcoding a single API key per provider and constantly crashing into rate limits, 429 throttles, or retired model tags, **TierMax** manages a **resilient pool of upstream keys**, dynamically routes requests based on complexity and latency, executes multi-model consensus fusion, auto-calibrates free-tier quotas, and transparently heals deprecated model tags.
 
-It exposes an **OpenAI-compatible API** at `/v1/chat/completions`, so anything that already works with OpenAI works with TierMax — no code changes on the client side.
-
----
-
-## How it works
-
-```
-Your Agent / App
-      │
-      │  POST /v1/chat/completions
-      │  Authorization: Bearer gk_xxxxx
-      ▼
-┌──────────────────────────────────────────┐
-│              TierMax Gateway             │
-│                                          │
-│  1. Verify gateway key (Supabase DB)     │
-│  2. Check semantic cache (SHA-256 LRU)   │
-│  3. Classify request tier (SOAT)         │
-│  4. Select best upstream provider        │
-│  5. Forward request with upstream key    │
-│  6. On failure → retry next provider     │
-│  7. Cache response + log request         │
-└────────────────┬─────────────────────────┘
-                 │
-       ┌─────────┼──────────┐
-       ▼         ▼          ▼
-   Google      Groq     OpenRouter
-   Gemini    Cerebras    Mistral ...
-```
+It exposes a 100% **OpenAI-compatible API** at `/v1/chat/completions` — zero client code modifications needed.
 
 ---
 
-## Features
+## 🚀 Key Features
 
 | Feature | Description |
 |---|---|
-| **OpenAI-compatible API** | Drop-in replacement — no client changes needed |
-| **Multi-key round-robin** | Distributes load across multiple API keys per provider |
-| **Automatic failover** | If a provider errors or rate-limits, the next one is tried instantly |
-| **SOAT Smart Router** | Classifies each request as Economy / Standard / Premium and routes accordingly |
-| **Semantic cache** | SHA-256 keyed in-memory LRU cache — identical prompts served instantly at zero cost |
-| **Context trimming** | Trims message history to fit provider limits without breaking the conversation |
-| **Latency guard** | Skips providers with historically high latency for time-sensitive requests |
-| **Brave Search proxy** | Routes web search requests through a pool of Brave API keys |
-| **Analytics** | Every request logged — model, tokens, provider, latency, status |
-| **Admin dashboard (TierMax UI)** | React web app to manage providers, gateway keys, usage stats, and analytics |
-| **Batch jobs** | Submit async batch requests processed by a dedicated worker |
-| **Copy key from dashboard** | Gateway keys can be copied directly from the project cards |
-
----
-
-## Architecture overview
-
-```
-free-llm-gateway/
-│
-├── backend/            # Hono (Node.js) API server
-│   ├── src/
-│   │   ├── routes/
-│   │   │   ├── v1.ts           ← /v1/chat/completions (SOAT routing, cache, failover)
-│   │   │   ├── projects.ts     ← Project CRUD
-│   │   │   ├── gatewayKeys.ts  ← Gateway key management + /reveal endpoint
-│   │   │   ├── upstreamKeys.ts ← Upstream provider key management
-│   │   │   ├── analytics.ts    ← Request log queries
-│   │   │   ├── batch.ts        ← Batch job submission
-│   │   │   └── pricing.ts      ← Token cost estimates
-│   │   ├── middleware/
-│   │   │   └── auth.ts         ← JWT authentication middleware
-│   │   ├── tierConfig.ts       ← SOAT tier → provider mapping
-│   │   └── db.ts               ← Supabase client
-│   └── .env.example
-│
-├── frontend/           # React + Vite admin dashboard (TierMax UI v2.1)
-│   ├── src/
-│   │   ├── pages/
-│   │   │   ├── Dashboard.tsx   ← Project list + quick copy API key
-│   │   │   ├── ProjectDetail.tsx ← Upstream keys, gateway keys, analytics
-│   │   │   └── Login.tsx
-│   │   ├── App.tsx             ← Auth shell + navbar
-│   │   ├── i18n.tsx            ← EN/ES translations
-│   │   └── index.css           ← Design system (orange/dark theme)
-│   └── .env.example
-│
-├── batch-worker/       # Background worker for async batch jobs
-├── docs/               # Internal technical docs
-├── ecosystem.config.js # PM2 process definition
-└── README.md
-```
-
----
-
-## Requirements
-
-- **Node.js** v18+ (v20 recommended)
-- **npm** v9+
-- A free **[Supabase](https://supabase.com)** account (used as the database)
-- API keys for at least one LLM provider (Google AI Studio, Groq, OpenRouter, etc.)
-- **PM2** (optional, for running as a background service)
+| 💾 **Zero-Config Local SQLite** | Runs out-of-the-box with Node's native `node:sqlite`. **No Supabase, PostgreSQL, or external cloud DB required**. |
+| ☁️ **Multi-Database Architecture** | Seamlessly toggle between local SQLite and cloud Supabase. Includes 1-click cloud-to-local sync (`npm run db:pull`). |
+| 🧠 **Dual Engine Intelligence** | **System 1 (TypeSafe AI Jev)** for sub-millisecond routing decisions + **System 2 (Manager LLM)** for automated quota calibration and diagnostic reasoning. |
+| 🔮 **Virtual Consensus Fusion** | Synthesizes answers via parallel 3-model competition (`fusion:m1,m2,m3` or `model: "fusion"`) resolved by an autonomous Judge Arbiter. |
+| 🛡️ **Free-Tier Guardian** | Proactive sliding-window RPM, TPM, RPD, and TPD tracking with smooth queue delay (up to 6s) and passive 429 backoff cooldown. |
+| ⚡ **One-API Channel Ping** | 1-click real-time latency testing (`⚡ ms`) for individual keys and project-wide channels with auto-detection of available models. |
+| 🩹 **Self-Healing Model Registry** | Automatically updates retired or deprecated model tags (e.g. `gpt-4-turbo` → `gpt-4o`, `gemini-1.5` → `gemini-2.0`) without breaking active agent workflows. |
+| 🔄 **Multi-Key Round-Robin & Failover** | Balances load across dozens of keys per provider. If a provider errors or throttles, the next is tried instantly. |
+| 🏎️ **Semantic Cache (LRU)** | In-memory SHA-256 cache returns identical prompts instantly at zero cost with `X-Cache: HIT`. |
+| ✂️ **Context & Token Guards** | Intelligent context trimming to fit provider limits and per-provider output token caps (`max_tokens`). |
+| 🎛️ **Modern React Console** | Bilingual (EN/ES) dashboard with real-time SSE typewriter playground, live telemetry inspector, and project management. |
 
 ---
 
 ## ⚡ Quickstart Setup (< 1 Minute)
 
-TierMax includes a **Zero-Config Embedded Local Database (SQLite)**. You do **NOT** need Supabase, PostgreSQL, cloud accounts, or external services to start using TierMax.
+TierMax includes an **Embedded Zero-Config Local Database (SQLite)**. You do **NOT** need Supabase, PostgreSQL, or any cloud database account to run TierMax.
 
 ### Option 1: 1-Click Automated Setup (Recommended)
 
 ```bash
 git clone https://github.com/Yeri0101/TierMax.git
 cd TierMax
+chmod +x quickstart.sh
 ./quickstart.sh
 ```
 
-Or using npm:
+Or using npm scripts:
 ```bash
 npm run setup
 npm run dev
@@ -139,8 +63,8 @@ npm run dev
 
 - **Dashboard UI**: [http://localhost:5173](http://localhost:5173)
 - **OpenAI Gateway API**: [http://localhost:3000/v1](http://localhost:3000/v1)
-- **Default Login**: `admin` / `admin` (changeable in Settings)
-- **Database**: Embedded SQLite stored in `./data/tiermax.db` (auto-migrated and seeded).
+- **Default Admin Credentials**: `admin` / `admin` (changeable directly in the dashboard)
+- **Database**: Local SQLite stored at `./data/tiermax.db` (auto-bootstrapped and seeded).
 
 ---
 
@@ -150,13 +74,13 @@ npm run dev
 docker compose up -d
 ```
 
-Starts the complete gateway and web console on port 3000 with persistent data in `./data`.
+Starts the entire gateway and web dashboard on port `3000` with persistent local SQLite storage mounted at `./data`.
 
 ---
 
 ### Option 3: Supabase Cloud (Optional)
 
-If you prefer to use Supabase Cloud instead of local SQLite:
+If you prefer using Supabase Cloud instead of local SQLite:
 1. In `backend/.env` (or root `.env`):
    ```env
    DB_TYPE=supabase
@@ -164,142 +88,140 @@ If you prefer to use Supabase Cloud instead of local SQLite:
    SUPABASE_ANON_KEY=your-anon-key
    ```
 2. **Instant Cloud-to-Local Migration**:
-   If you have an existing Supabase project and want to migrate everything to Local SQLite to run offline, simply run:
+   Want to clone all your cloud Supabase data into local SQLite to run 100% offline? Simply run:
    ```bash
    npm run db:pull
    ```
-   This copies all projects, upstream keys, gateway keys, routing rules, and custom pricing directly into your local SQLite database.
-
-### 3. Configure the backend
-
-```bash
-cd backend
-npm install
-cp .env.example .env
-```
-
-Edit `backend/.env`:
-
-```env
-PORT=3000
-SUPABASE_URL=https://your-project-id.supabase.co
-SUPABASE_ANON_KEY=your-supabase-anon-key
-ADMIN_JWT_SECRET=change-this-to-a-long-random-string
-
-# Optional — key used for bypass of tier limits on premium requests
-SOAT_PREMIUM_BYPASS_KEY=gk_your_premium_gateway_key
-
-# Optional tuning
-CACHE_TTL_SECONDS=60
-CACHE_MAX_SIZE=500
-TIER_CONFIG_JSON={"economy":["groq","cerebras"],"standard":["openrouter","puter"],"premium":["openai","google"]}
-```
-
-Find your `SUPABASE_URL` and `SUPABASE_ANON_KEY` in your Supabase dashboard under **Project Settings → API**.
-
-> ❌ Never commit your `.env` file. It is already in `.gitignore`.
-
-### 4. Start the backend
-
-```bash
-cd backend
-npm run dev
-```
-
-Verify it's running:
-
-```bash
-curl http://localhost:3000/
-# → {"message":"TierMax Gateway Running"}
-```
-
-### 5. Configure and start the frontend
-
-```bash
-cd frontend
-npm install
-cp .env.example .env
-```
-
-Edit `frontend/.env`:
-
-```env
-VITE_API_URL=http://localhost:3000/api
-```
-
-```bash
-npm run dev
-# → Dashboard at http://localhost:5173
-```
-
-Log in with the credentials you inserted in Step 2 (`admin` / `changeme` by default).
-
-### 6. Add your first provider key
-
-From the TierMax dashboard:
-
-1. Click **Create New Project** (e.g. `"My Project"`)
-2. Open the project → go to **Upstream Keys** tab → click **Add Key**
-3. Select a provider (e.g. `google`) and paste your API key
-4. Go to **Gateway Keys** tab → click **Create Gateway Key**
-5. Your new gateway key is shown — copy it from the project card (📋 button) or from inside the project
+   This copies all projects, upstream keys, gateway keys, routing rules, and pricing tables in seconds.
 
 ---
 
-## Running as a background service (PM2)
+## 🏗️ Architecture Overview
 
-For production use, run all processes with PM2 so they survive reboots:
-
-```bash
-# Install PM2 globally (only once)
-npm install -g pm2
-
-# Start all services using the included config
-pm2 start ecosystem.config.js
-
-# Save the process list so it auto-restarts on reboot
-pm2 save
-pm2 startup
 ```
-
-The `ecosystem.config.js` includes:
-
-| PM2 name | Directory | What it does |
-|---|---|---|
-| `openclaw-backend` | `backend/` | Main API server (port 3000) |
-| `openclaw-frontend` | `frontend/` | Admin dashboard (port 5173) |
-| `openclaw-batch-worker` | `batch-worker/` | Async batch job processor |
-
-Useful PM2 commands:
-
-```bash
-pm2 list                    # Show all running processes
-pm2 logs openclaw-backend   # Tail backend logs
-pm2 restart openclaw-backend
-pm2 stop all
-pm2 delete all
+Your AI Agents / Apps (OpenClaw, Cursor, Python SDK)
+                     │
+                     │  POST /v1/chat/completions (Bearer gk_xxxxx)
+                     ▼
+┌───────────────────────────────────────────────────────────┐
+│                      TierMax Gateway                      │
+│                                                           │
+│  1. Auth & Model Allowlist (SQLite / Supabase)            │
+│  2. Free-Tier Guardian (Sliding-window RPM/TPM check)     │
+│  3. Semantic Cache (SHA-256 LRU)                          │
+│  4. Dual Engine Decision:                                 │
+│     ├─ Virtual Consensus Fusion (3 Drafts + Judge)        │
+│     ├─ System 1: TypeSafe AI Jev (Fast intelligent route) │
+│     └─ Heuristic SOAT Router (Economy/Standard/Premium)   │
+│  5. Upstream Dispatch (Round-robin + failover)            │
+│  6. Context Trimming & Output Token Cap                   │
+│  7. Logging & Telemetry (ms latency, tokens, cost)        │
+└─────────────────────────────┬─────────────────────────────┘
+                              │
+       ┌──────────────────────┼──────────────────────┐
+       ▼                      ▼                      ▼
+  Google AI Studio          Groq                OpenRouter
+(gemini-2.5-flash)     (llama-3.3-70b)       (deepseek-chat)
 ```
 
 ---
 
-## Usage
+## 🔮 Virtual Consensus Fusion
 
-### Making a request directly
+TierMax includes a **Multi-Model Consensus Fusion Engine**. Instead of relying on a single model's hallucination or bias, TierMax can run a 3-model parallel draft competition and synthesize the absolute best response through an Arbiter Judge.
 
-Once you have a gateway key:
+### Calling Consensus Fusion:
+In your agent or request payload, simply specify `model: "fusion"`:
 
 ```bash
 curl -X POST http://localhost:3000/v1/chat/completions \
   -H "Authorization: Bearer gk_your_gateway_key" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "gemini-2.0-flash",
-    "messages": [{"role": "user", "content": "Explain what a gateway is in one sentence."}]
+    "model": "fusion",
+    "messages": [{"role": "user", "content": "Explain quantum entanglement vs superposition."}]
   }'
 ```
 
-### Using with the OpenAI Python SDK
+### Dynamic Trios:
+You can customize the contenders and judge on the fly in the model string:
+```json
+{
+  "model": "fusion:deepseek-chat,qwen/qwen3.8-27b,moonshotai/kimi-k3",
+  "messages": [{"role": "user", "content": "Optimize this distributed database query."}]
+}
+```
+1. **Contender 1 (Draft A)**, **Contender 2 (Draft B)**, and **Contender 3 (Draft C)** execute in parallel.
+2. The **Synthesizer Judge** compares all drafts, resolves discrepancies, filters hallucinations, and returns the unified consensus answer.
 
+---
+
+## 🛡️ Free-Tier Guardian & Anti-429 Resilience
+
+Managing free-tier keys (e.g. Gemini 15 RPM, Groq 30 RPM) is notoriously prone to `429 Too Many Requests` errors.
+
+TierMax's **Free-Tier Guardian** operates proactively:
+- **Sliding-Window Tracking**: Continuously tracks Requests per Minute (RPM), Tokens per Minute (TPM), Requests per Day (RPD), and Tokens per Day (TPD).
+- **Proactive Smoothing Queue**: If a key is at 90% quota, TierMax introduces a sub-second smooth delay (up to 6s) to allow the quota window to reset without dropping the request.
+- **Silent Failover**: If a key hits its threshold or receives a 429, TierMax immediately retries the next key in the pool.
+- **Passive Rate-Limit Header Ingestion**: Parses standard provider response headers (`x-ratelimit-remaining-requests`, `x-ratelimit-reset-requests`) to stay synchronized with upstream servers.
+- **Autonomous Auto-Calibration**: Powered by System 2 (Manager LLM), TierMax can auto-tune custom limits based on live provider policies.
+
+---
+
+## ⚡ One-API Channel Testing & Model Discovery
+
+From the **Configured Providers** panel in the dashboard:
+- **1-Click Ping Test (`⚡ ms`)**: Test individual upstream keys or test an entire project's provider pool concurrently with live latency measurements.
+- **Project-Scoped Model Discovery**: Automatically populates available models for each provider key.
+- **Model Deprecation Self-Healing**: Endpoints like `GET /v1/diagnose` allow external agents to inspect active models, deprecation rules, and auto-healed routes in real time.
+
+---
+
+## 🚦 Gateway Limits & Execution Pipeline
+
+TierMax applies multi-layer protection to every request in strict execution order:
+
+```
+Incoming request
+    │
+    ├─ 1. Auth Guard          → Validates gateway key against DB (SQLite / Supabase)
+    ├─ 2. Model Allowlist     → Rejects models not assigned to this key (HTTP 403)
+    ├─ 3. Project Budget      → Blocks requests when spend ≥ budget_usd (HTTP 402)
+    ├─ 4. Free-Tier Guardian  → Sliding-window RPM/TPM check + smooth queue delaying
+    ├─ 5. Provider Health     → Skips paused, 429 rate-limited, or errored providers
+    ├─ 6. Latency Guard       → Skips providers flagged as slow (consecutive > 15s)
+    ├─ 7. Semantic Cache      → Returns cached response for identical prompts (X-Cache: HIT)
+    ├─ 8. Orchestrator Engine → Consensus Fusion (3 drafts + Judge) or System 1 (Jev/SOAT)
+    ├─ 9. Context Trim Guard  → Trims oldest messages to fit provider context window
+    └─ 10. Output Token Cap   → Truncates max_tokens to per-provider (or global) limit
+```
+
+### Context Trim Guard
+If an upstream key has `max_context_tokens` configured, the gateway automatically trims older conversation messages before forwarding — preserving the system prompt and the latest user message. This prevents context-overflow errors without failing the request.
+
+### Output Token Cap (`max_output_tokens`)
+The `max_tokens` field in every request is silently capped before it reaches the provider:
+1. **Per-provider value** — set from the dashboard **Output Limit** pill (stored in `upstream_keys`).
+2. **Global env default** — `SOAT_DEFAULT_MAX_TOKENS` (default: `16000`).
+3. **Hardcoded fallback** — `16,000`.
+
+---
+
+## 💻 Usage & Code Integration
+
+### 1. Direct cURL
+```bash
+curl -X POST http://localhost:3000/v1/chat/completions \
+  -H "Authorization: Bearer gk_your_gateway_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gemini-2.5-flash",
+    "messages": [{"role": "user", "content": "Explain what an AI gateway is in one sentence."}]
+  }'
+```
+
+### 2. Python OpenAI SDK
 ```python
 from openai import OpenAI
 
@@ -309,346 +231,170 @@ client = OpenAI(
 )
 
 response = client.chat.completions.create(
-    model="gemini-2.0-flash",
+    model="gemini-2.5-flash",
     messages=[{"role": "user", "content": "Hello from TierMax!"}]
 )
 
 print(response.choices[0].message.content)
 ```
 
-### Using with JavaScript / fetch
+### 3. JavaScript / TypeScript
+```typescript
+import OpenAI from "openai";
 
-```javascript
-const response = await fetch("http://localhost:3000/v1/chat/completions", {
-  method: "POST",
-  headers: {
-    "Authorization": "Bearer gk_your_gateway_key",
-    "Content-Type": "application/json"
-  },
-  body: JSON.stringify({
-    model: "gemini-2.0-flash",
-    messages: [{ role: "user", content: "Hello!" }]
-  })
+const openai = new OpenAI({
+  baseURL: "http://localhost:3000/v1",
+  apiKey: "gk_your_gateway_key",
 });
 
-const data = await response.json();
-console.log(data.choices[0].message.content);
+const completion = await openai.chat.completions.create({
+  model: "fusion",
+  messages: [{ role: "user", content: "Synthesize the advantages of Rust vs Go." }],
+});
+
+console.log(completion.choices[0].message.content);
 ```
 
----
-
-## SOAT Smart Router
-
-Every incoming request is automatically classified into one of three tiers based on prompt length, token count, and presence of tools. The router then selects the best available provider for that tier:
-
-| Tier | When used | Default providers |
-|---|---|---|
-| **Economy** | Short prompts, no tools, < 200 tokens | Groq, Cerebras |
-| **Standard** | Medium complexity, simple tool use | OpenRouter, Puter, Mistral |
-| **Premium** | Large context, complex tasks, > 1500 tokens | OpenAI, Google |
-
-If the preferred tier has no healthy providers, the router falls back to the next tier — requests never fail because a single provider is down.
-
-You can override the tier → provider mapping at runtime:
-
-```bash
-TIER_CONFIG_JSON='{"economy":["cerebras"],"standard":["mistral"],"premium":["google"]}' npm run dev
-```
-
----
-
-## Admin Dashboard (TierMax UI v2.1)
-
-Open `http://localhost:5173` after starting the frontend.
-
-### What you can do from the dashboard
-
-**Projects panel**
-- Create and color-code projects to organize different apps or teams
-- See each project's gateway keys directly on the card
-- **📋 Copy any gateway key to clipboard** without entering the project — click the copy icon next to any key preview; it changes to ✅ for 3 seconds with a "Copied!" popup
-
-**Inside a project**
-- **Upstream Keys tab** — Add, view, enable/disable provider API keys (Gemini, Groq, OpenRouter, etc.)
-- **Gateway Keys tab** — Issue gateway keys with specific model access; delete keys that are no longer needed
-- **Analytics tab** — Request volume, token usage, latency histogram, error rates, recent request log
-
-**Navbar**
-- `EN / ES` language toggle
-- Change admin password (without leaving the app)
-- Version indicator: **TierMax v2.1**
-
----
-
-## Use case: Running OpenClaw with TierMax
-
-[OpenClaw](https://github.com/Yeri0101/openclaw-bridge) is a local AI agent system that runs tasks autonomously — writing code, browsing the web, managing files, orchestrating multi-agent debates. By default it needs a separate API key for every provider.
-
-With **TierMax** as a centralized gateway:
-
-```
-OpenClaw agent
-      │
-      │  one gateway key · one endpoint
-      ▼
-TierMax  ←── pools all your API keys here
-      │
-      ├── Gemini 2.0 Flash  (Google — free tier)
-      ├── Groq              (very fast, generous free tier)
-      ├── Cerebras          (economy tasks)
-      └── OpenRouter        (fallback for anything else)
-```
-
-**Why this setup makes sense:**
-
-- OpenClaw sends many parallel requests — hitting rate limits with a single key is common. TierMax round-robins across your pool so no single key gets exhausted.
-- You only configure one URL + one key in OpenClaw regardless of how many providers you add to the pool.
-- The SOAT router automatically sends cheap tasks (summaries, quick responses) to free-tier providers like Groq, and reserves premium quota for complex reasoning or long contexts.
-- If Google returns a 429 or goes down, TierMax retries the next healthy provider — OpenClaw never sees the error.
-- Every request is logged in the dashboard so you can see exactly which provider handled what.
-
-### Step-by-step setup
-
-**1. Start TierMax** (using PM2, once):
-
-```bash
-pm2 start ecosystem.config.js
-```
-
-**2. In the TierMax dashboard** (`http://localhost:5173`):
-- Create a project called `openclaw`
-- Add your provider keys (Gemini, Groq, OpenRouter, etc.)
-- Create a gateway key — copy it directly from the project card, e.g. `gk_abc123`
-
-**3. Configure OpenClaw** to point to TierMax. In your OpenClaw agent config:
-
+### 4. Integration with OpenClaw Agent
+In your OpenClaw agent configuration (`agent.json` or agent UI):
 ```json
 {
-  "agents": {
-    "main": {
-      "provider": "openai",
-      "baseUrl": "http://localhost:3000/v1",
-      "apiKey": "gk_abc123",
-      "model": "gemini-2.0-flash"
-    }
-  }
+  "provider": "openai",
+  "baseUrl": "http://localhost:3000/v1",
+  "apiKey": "gk_your_gateway_key",
+  "model": "gemini-2.5-flash"
 }
 ```
-
-From this point, every request OpenClaw makes goes through TierMax. You get automatic failover, smart tier routing, and a full log of every call in the dashboard — without touching the OpenClaw config again.
+OpenClaw immediately inherits multi-key load balancing, auto-retry on 429s, semantic caching, and full request telemetry.
 
 ---
 
-## Environment variables reference
+## 🏃 Running in Production (PM2)
 
-### Backend (`backend/.env`)
+For production environments without Docker, run all processes using PM2:
+
+```bash
+# Install PM2 globally (once)
+npm install -g pm2
+
+# Start all services using the included config
+pm2 start ecosystem.config.js
+
+# Save process list for system reboot persistence
+pm2 save
+pm2 startup
+```
+
+Useful PM2 commands:
+```bash
+pm2 list                    # View process table
+pm2 logs openclaw-backend   # View backend logs
+pm2 restart all             # Restart services
+pm2 stop all                # Stop services
+```
+
+---
+
+## 📁 Project Structure
+
+```
+TierMax/
+├── backend/                   # Hono (Node.js) API gateway
+│   ├── src/
+│   │   ├── db/
+│   │   │   └── sqliteAdapter.ts  ← Zero-config embedded SQLite adapter
+│   │   ├── routes/
+│   │   │   ├── v1.ts             ← /v1/chat/completions, /v1/models, /v1/diagnose
+│   │   │   ├── channelTesting.ts ← 1-click ping latency testing (One-API parity)
+│   │   │   ├── engineConfig.ts   ← System 1 & System 2 configuration & calibration
+│   │   │   ├── projects.ts       ← Project management CRUD
+│   │   │   ├── gatewayKeys.ts    ← Gateway key issuance & reveal
+│   │   │   └── analytics.ts      ← Latency, tokens, cost analytics
+│   │   ├── utils/
+│   │   │   ├── freeTierGuardian.ts ← Sliding-window RPM/TPM rate limiter
+│   │   │   ├── engineBridge.ts     ← TypeSafe Jev & Manager LLM bridge
+│   │   │   ├── modelHealing.ts     ← Deprecation migration tables
+│   │   │   ├── completionEngine.ts ← Upstream dispatch & stream handling
+│   │   │   └── dbSync.ts           ← Cloud-to-Local database pull utility
+│   │   └── db.ts                   ← Universal DB selector (SQLite / Supabase)
+│   └── data/                       ← Local SQLite database storage (.gitignore)
+│
+├── frontend/                  # React + Vite Admin Console (TierMax UI)
+│   ├── src/
+│   │   ├── pages/
+│   │   │   ├── Dashboard.tsx       ← Projects overview & instant key copy
+│   │   │   ├── ProjectDetail.tsx   ← Providers, channels, rate limits, analytics
+│   │   │   ├── Playground.tsx      ← Real-time SSE streaming typewriter console
+│   │   │   └── EngineSettings.tsx  ← Dual engine, fusion trios, & auto-calibration
+│   │   ├── App.tsx                 ← Auth shell, DB mode indicator, navbar
+│   │   └── i18n.tsx                ← Full bilingual (EN / ES) localization
+│
+├── scripts/
+│   ├── dev.mjs                ← Unified dev runner (ports 3000 + 5173)
+│   └── setup.mjs              ← Interactive setup wizard
+├── quickstart.sh              ← 1-click bash starter script
+├── Dockerfile                 ← Production multi-stage Docker build
+├── docker-compose.yml         ← Single-command persistent container
+└── ecosystem.config.js        ← PM2 process manager definition
+```
+
+---
+
+## ⚙️ Environment Variables Reference
+
+### Backend (`backend/.env` or root `.env`)
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `PORT` | No | `3000` | Port the backend server listens on |
-| `SUPABASE_URL` | ✅ | — | Your Supabase project URL |
-| `SUPABASE_ANON_KEY` | ✅ | — | Supabase anon key (Project Settings → API) |
-| `ADMIN_JWT_SECRET` | ✅ | — | Secret used to sign admin JWT tokens |
-| `SOAT_PREMIUM_BYPASS_KEY` | No | — | A gateway key that bypasses the output token cap and tier limits |
-| `SOAT_DEFAULT_MAX_TOKENS` | No | `16000` | Global default output token cap applied to all providers (overridden per-provider from the dashboard) |
-| `CACHE_TTL_SECONDS` | No | `60` | Seconds to cache identical responses in memory |
-| `CACHE_MAX_SIZE` | No | `500` | Max number of entries in the LRU cache |
-| `LATENCY_TIMEOUT_MS` | No | `15000` | Ms after which a slow response counts toward the slow threshold |
-| `LATENCY_SLOW_WINDOW_MS` | No | `60000` | How long (ms) a slow-flagged provider is skipped |
-| `LATENCY_SLOW_THRESHOLD` | No | `2` | Consecutive slow responses before a provider is flagged |
-| `TIER_CONFIG_JSON` | No | *(see tierConfig.ts)* | JSON override for tier → provider mapping |
+| `PORT` | No | `3000` | Port for the backend API server |
+| `DB_TYPE` | No | `sqlite` | Database engine: `sqlite` (embedded local) or `supabase` |
+| `SQLITE_DB_PATH` | No | `./data/tiermax.db` | File path for the local SQLite database |
+| `SUPABASE_URL` | No | — | Supabase project URL (only needed if `DB_TYPE=supabase`) |
+| `SUPABASE_ANON_KEY` | No | — | Supabase anon key (only needed if `DB_TYPE=supabase`) |
+| `ADMIN_JWT_SECRET` | No | `auto-generated` | Secret key used to sign Admin session JWTs |
+| `SOAT_DEFAULT_MAX_TOKENS` | No | `16000` | Global default max output token cap |
+| `CACHE_TTL_SECONDS` | No | `60` | In-memory semantic cache TTL in seconds |
+| `CACHE_MAX_SIZE` | No | `500` | Max entries in semantic LRU cache |
+| `LATENCY_TIMEOUT_MS` | No | `15000` | Threshold (ms) to flag a provider as slow |
 
 ### Frontend (`frontend/.env`)
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `VITE_API_URL` | ✅ | — | Full URL to the backend API (e.g. `http://localhost:3000/api`) |
+| `VITE_API_URL` | No | `http://localhost:3000/api` | Base URL for TierMax management API |
 
 ---
 
-## API reference
+## 📜 Changelog
 
-### `POST /v1/chat/completions`
-
-OpenAI-compatible completions endpoint.
-
-**Headers:**
-```
-Authorization: Bearer gk_your_gateway_key
-Content-Type: application/json
-```
-
-**Body:**
-```json
-{
-  "model": "gemini-2.0-flash",
-  "messages": [
-    { "role": "system", "content": "You are a helpful assistant." },
-    { "role": "user", "content": "What is 2 + 2?" }
-  ],
-  "temperature": 0.7,
-  "max_tokens": 512
-}
-```
-
-**Response:** Standard OpenAI `ChatCompletion` object.
-
----
-
-### `GET /api/projects`
-
-Returns all projects with their gateway key previews and average latency.
-
-**Headers:** `Authorization: Bearer <admin JWT>`
-
----
-
-### `GET /api/analytics/:project_id`
-
-Returns request logs, token totals, latency stats, and provider breakdown for a project.
-
----
-
-### `GET /api/gateway-keys/:id/reveal`
-
-Returns the full `api_key` value for a gateway key. Used internally by the dashboard copy button. Requires admin auth.
-
----
-
-## Gateway Limits & Controls
-
-TierMax applies several layers of control to every request. Here is the complete pipeline, in order of execution:
-
-```
-Incoming request
-    │
-    ├─ 1. Auth guard          → rejects invalid/missing gateway key (HTTP 401)
-    ├─ 2. Model allowlist      → rejects models not assigned to this key (HTTP 403)
-    ├─ 3. Budget check         → blocks requests when project spend ≥ budget_usd (HTTP 402)
-    ├─ 4. Provider health      → skips paused / rate-limited / error providers
-    ├─ 5. Latency guard        → skips providers flagged as slow
-    ├─ 6. Semantic cache        → returns cached response for identical prompts (no upstream call)
-    ├─ 7. Smart router (SOAT)  → selects the best upstream tier for the request
-    ├─ 8. Context trim          → trims oldest messages to fit provider's context window
-    └─ 9. Output token cap      → truncates max_tokens to per-provider (or global) limit
-```
-
-### 1. Authentication
-
-Every request to `/v1/*` must include `Authorization: Bearer <gateway_key>`. The key is validated against the `gateway_keys` table in Supabase.
-
-### 2. Model Allowlist
-
-Each gateway key can only use the models explicitly assigned to it from the dashboard. Requesting any other model returns HTTP 403.
-
-### 3. Project Budget
-
-Projects can have an optional `budget_usd` limit. When cumulative spend (tracked via `request_logs.total_cost_usd`) reaches the budget, all further requests for that project return HTTP 402 until the budget is raised or reset.
-
-### 4. Provider Health States
-
-Each upstream key has a runtime health state tracked in memory:
-
-| State | Behaviour | Auto-recovery |
-|---|---|---|
-| `healthy` | Normal — accepts requests | — |
-| `rate_limited` | Skipped in routing | After 60 s or next minute window |
-| `error` | Skipped in routing | After 15 s or next minute window |
-| `paused` | Blocked permanently | Manual Resume from dashboard |
-
-From the **Configured Providers** panel you can **Pause**, **Resume**, and **Reset** individual keys or all at once.
-
-### 5. Latency Guard
-
-If a provider responds slowly **2 consecutive times** (default threshold: ≥ 15,000 ms), it is flagged as *slow* and skipped in the fallback loop for **60 seconds**. This keeps response times predictable without permanently removing the provider.
-
-Configurable via env vars:
-
-```env
-LATENCY_TIMEOUT_MS=15000      # Slow threshold per response
-LATENCY_SLOW_WINDOW_MS=60000  # How long the penalty lasts
-LATENCY_SLOW_THRESHOLD=2      # Consecutive slow hits before flagging
-```
-
-### 6. Semantic Cache
-
-Non-streaming requests with identical `model + messages` are served from an in-memory LRU cache without calling the upstream provider. Cache hits return the header `X-Cache: HIT`.
-
-- Default TTL: **60 seconds** (`CACHE_TTL_SECONDS`)
-- Max entries: **500** (`CACHE_MAX_SIZE`)
-- Key: SHA-256 hash of `model + JSON.stringify(messages)`
-
-### 7. SOAT Smart Router
-
-See [SOAT Smart Router](#soat-smart-router) section above.
-
-### 8. Context Trim Guard
-
-If an upstream key has `max_context_tokens` configured (set from the dashboard **Ctx Limit** column), the gateway automatically trims the oldest messages from the conversation history before forwarding — preserving the system prompt and the latest user message. This prevents context-overflow errors without failing the request.
-
-### 9. Output Token Cap (`max_output_tokens`)
-
-The `max_tokens` field in every request is silently capped before it reaches the provider. The effective cap is resolved in this priority order:
-
-1. **Per-provider value** — set from the dashboard **Output Limit** column (stored as `max_output_tokens` in `upstream_keys`)
-2. **Global env default** — `SOAT_DEFAULT_MAX_TOKENS` (e.g. `32000`)
-3. **Hardcoded fallback** — `16,000`
-
-> **Exempt:** Google, Vertex, and any key matching `SOAT_PREMIUM_BYPASS_KEY` are never capped.
-
-**From the dashboard** you can configure output limits without touching env vars:
-
-- **Token Limit** button in the *Configured Providers* panel header → applies a cap to **all providers** in the project at once
-- **Output Limit** pill per row in the same panel → applies a cap to a **single provider**
-- Leave blank / set to ∞ Default to remove the per-provider cap and fall back to the global default
-
-> ⚠️ This cap is per-**request** (it truncates `max_tokens`). It is separate from the token-per-minute/day counters shown in the Usage column.
-
----
-
-## Security notes
-
-- **Upstream keys** are stored in Supabase, never exposed to clients.
-- **Gateway keys** are what clients use — they only grant access to the models you configure per key.
-- The `/reveal` endpoint is protected by the admin JWT middleware — only the logged-in dashboard can call it.
-- The admin password is stored as plain text in this prototype. **Migrate to bcrypt before exposing externally.**
-- The server binds to `localhost` by default. To expose externally, put nginx or Caddy in front as a reverse proxy with HTTPS.
-- Add rate limiting to `/api/auth/*` before any public deployment.
-
----
-
-## Changelog
+### v3.0 (2026-09-24)
+- **Zero-Config Local SQLite** — Embedded database using Node.js native `node:sqlite`. Automatic table bootstrapping and default seed data. No external cloud dependencies required.
+- **Universal Multi-DB Architecture** — Seamless switching between SQLite and Supabase Cloud. Included `npm run db:pull` migration script to pull cloud data to local offline storage.
+- **1-Click Installer** — Added `./quickstart.sh`, `npm run setup`, and unified concurrent runner `npm run dev`.
+- **Docker Compose Deployment** — Ready-to-deploy `Dockerfile` and `docker-compose.yml` with persistent storage volume.
+- **Dual Engine System** — System 1: TypeSafe AI Jev integration for rapid intelligent routing decisions; System 2: Manager LLM for self-healing and auto-calibrating free tiers.
+- **Virtual Consensus Fusion** — Parallel 3-contender competition (`Draft A`, `Draft B`, `Draft C`) synthesized by an autonomous Arbiter Judge (`model: "fusion"`).
+- **Free-Tier Guardian** — Sliding-window proactive rate-limit guardian tracking RPM/TPM/RPD/TPD with anti-429 queue smoothing and passive header ingestion.
+- **One-API Channel Ping & Auto-Discovery** — Real-time latency measurement (`⚡ ms`) and project-scoped provider model detection.
+- **Interactive Playground Console** — Real-time SSE streaming typewriter viewer, parameter controls, and live execution telemetry inspector.
+- **Live DB Indicator Badge** — Real-time indicator in the navigation bar displaying active storage engine (`💾 SQLite Local` vs `☁️ Supabase`).
 
 ### v2.2 (2026-04-25)
-- **Output Token Cap UI** — new **Token Limit** button in the Configured Providers panel header. Opens a modal with quick presets (4K, 8K, 16K, 32K, 64K, 128K) and a custom input. Applies globally to all providers or individually per provider
-- **Per-provider Output Limit column** — clickable pill in the providers table shows the active cap and opens the same modal
-- **Dynamic token cap backend** — cap is now stored in `upstream_keys.max_output_tokens` (DB column) and resolved at request time: per-provider DB value → `SOAT_DEFAULT_MAX_TOKENS` env var → 16,000 hardcoded fallback
-- **New API endpoints** — `PATCH /api/providers/:id/output-token-limit` and `PATCH /api/providers/output-token-limit-all`
-- **Cap logging** — every time a `max_tokens` value is capped, a `[TokenCap]` log line is emitted with provider, effective cap, and source (DB vs env)
-- **Gateway limits documentation** — added full *Gateway Limits & Controls* section to README
+- Dynamic output token cap controls per provider and globally.
+- Token limit modal with quick presets (4K to 128K).
+- In-memory provider health state recovery.
 
 ### v2.1 (2026-04-24)
-- **Rebrand:** App renamed from "OpenClaw Gateway" to **TierMax** across all UI surfaces (navbar, login, dashboard, i18n EN + ES)
-- **Copy gateway key:** Added 📋 copy button on each gateway key in the project cards — no need to enter the project to copy the key
-- **Copy feedback:** Icon switches to ✅ for 3 seconds, with a floating "Copied!" popup animation
-- **Backend:** New protected `GET /gateway-keys/:id/reveal` endpoint used by the copy feature
-- **Security:** Premium bypass key moved from hardcoded string to `process.env.SOAT_PREMIUM_BYPASS_KEY`
-
-### v2.0
-- SOAT Smart Router (Economy / Standard / Premium tier classification)
-- Semantic cache (SHA-256 LRU)
-- Full analytics dashboard
-- Batch job worker
-- Multi-language support (EN / ES)
+- Rebrand to **TierMax**.
+- Instant 📋 copy gateway API keys from dashboard project cards.
+- Protected `/reveal` endpoint.
 
 ---
 
-## License
+## 📄 License
 
-MIT — use it, fork it, build on it.
-
----
+MIT © [Yeri0101](https://github.com/Yeri0101) — Free to use, modify, and build upon.
 
 <div align="center">
-  Built to run free — keep your providers flexible, your keys safe, and your agents fast.
+  <b>TierMax</b> — Built to run free. Keep your providers flexible, your keys safe, and your agents unstoppable.
 </div>
