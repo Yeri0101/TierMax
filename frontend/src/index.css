@@ -597,6 +597,24 @@ body {
   flex-direction: column;
   justify-content: space-between;
   box-shadow: var(--ring-subtle);
+  transition: all 0.25s ease-out;
+}
+
+@keyframes newCallFlash {
+  0% {
+    border-color: rgba(34, 197, 94, 0.9);
+    box-shadow: 0 0 18px rgba(34, 197, 94, 0.5);
+    transform: translateY(-2px);
+  }
+  100% {
+    border-color: var(--glass-border);
+    box-shadow: var(--ring-subtle);
+    transform: translateY(0);
+  }
+}
+
+.recent-call-card.new-call-pulse {
+  animation: newCallFlash 1.8s ease-out;
 }
 
 .metric-mini {

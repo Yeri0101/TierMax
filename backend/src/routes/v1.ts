@@ -11,6 +11,7 @@ import { anthropicToOpenAI, openAIToAnthropic, AnthropicSSETransformer, Anthropi
 import { executeFusion } from '../utils/fusionEngine';
 import { executeCompletionEngine } from '../utils/completionEngine';
 import { KNOWN_MODEL_MIGRATIONS, getProjectHistory } from '../utils/modelHealing';
+import { notifyNewRequest } from '../utils/dashboardEvents';
 
 
 type Variables = {
@@ -138,6 +139,7 @@ async function insertRequestLog(entry: {
         const timestamp = new Date().toISOString();
         console.error(`[${timestamp}] Logging failed:`, logErr);
     }
+    notifyNewRequest(entry);
 }
 
 async function getPricingForModel(model: string, provider: string | null): Promise<PricingMatch | null> {

@@ -93,7 +93,37 @@ export default function Dashboard() {
         }
     };
 
-    const loadProjects = async () => {
+    const [isLiveConnected, setIsLiveConnected] = useState(false);
+    const [newCallHighlight, setNewCallHighlight] = useState(false);
+
+    const loadOverview = async (silent = false) => {
+        try {
+            if (!silent) setLoading(true);
+            const overview = await fetchApi('/projects/dashboard-overview');
+            if (overview) {
+                if (Array.isArray(overview.projects)) setProjects(overview.projects);
+                if (Array.isArray(overview.recentCalls)) {
+                    setRecentCalls(prev => {
+                        if (overview.recentCalls.length > 0 && prev.length > 0) {
+                            if (overview.recentCalls[0].created_at !== prev[0].created_at) {
+                                setNewCallHighlight(true);
+                                setTimeout(() => setNewCallHighlight(false), 2000);
+                            }
+                        }
+                        return overview.recentCalls;
+                    });
+                }
+                if (overview.usageMetrics) setUsageMetrics(overview.usageMetrics);
+            }
+        } catch (err) {
+            console.error('Failed to load dashboard overview, falling back to legacy load:', err);
+            if (!silent) await loadLegacyProjects();
+        } finally {
+            if (!silent) setLoading(false);
+        }
+    };
+
+    const loadLegacyProjects = async () => {
         try {
             const projectsData = await fetchApi('/projects');
             setProjects(projectsData);
@@ -117,7 +147,6 @@ export default function Dashboard() {
                             })),
                         };
                     } catch (err) {
-                        console.error(`Failed to load analytics for project ${project.id}:`, err);
                         return { totalTokens: 0, totalCostUsd: 0, savedCostUsd: 0, logs: [] };
                     }
                 })
@@ -126,11 +155,7 @@ export default function Dashboard() {
             const totalTokens = analyticsResponses.reduce((sum, item) => sum + item.totalTokens, 0);
             const actualCostUsd = analyticsResponses.reduce((sum, item) => sum + item.totalCostUsd, 0);
             const estimatedSavingsUsd = analyticsResponses.reduce((sum, item) => sum + item.savedCostUsd, 0);
-            setUsageMetrics({
-                totalTokens,
-                actualCostUsd,
-                estimatedSavingsUsd,
-            });
+            setUsageMetrics({ totalTokens, actualCostUsd, estimatedSavingsUsd });
 
             const latestCalls = analyticsResponses
                 .flatMap(item => item.logs)
@@ -143,12 +168,68 @@ export default function Dashboard() {
             console.error(err);
             setRecentCalls([]);
             setUsageMetrics({ totalTokens: 0, actualCostUsd: 0, estimatedSavingsUsd: 0 });
-        } finally {
-            setLoading(false);
         }
     };
 
-    useEffect(() => { loadProjects(); }, []);
+    useEffect(() => {
+        loadOverview(false);
+
+        // 1. Server-Sent Events (SSE) for sub-second real-time responsiveness
+        const token = localStorage.getItem('token') || 'mock-admin-token-123';
+        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+        let eventSource: EventSource | null = null;
+        let retryTimer: any = null;
+
+        const connectSSE = () => {
+            try {
+                eventSource = new EventSource(`${API_URL}/projects/realtime-stream?token=${encodeURIComponent(token)}`);
+                eventSource.onopen = () => {
+                    setIsLiveConnected(true);
+                };
+                eventSource.addEventListener('connected', () => {
+                    setIsLiveConnected(true);
+                });
+                eventSource.addEventListener('new_request', () => {
+                    loadOverview(true);
+                });
+                eventSource.onerror = () => {
+                    setIsLiveConnected(false);
+                    if (eventSource) {
+                        eventSource.close();
+                        eventSource = null;
+                    }
+                    retryTimer = setTimeout(connectSSE, 5000);
+                };
+            } catch (err) {
+                console.warn('Realtime SSE connection failed, relying on polling:', err);
+                setIsLiveConnected(false);
+            }
+        };
+
+        connectSSE();
+
+        // 2. High-frequency polling fallback (3s interval) to guarantee state accuracy
+        const pollInterval = setInterval(() => {
+            if (document.visibilityState === 'visible') {
+                loadOverview(true);
+            }
+        }, 3000);
+
+        // 3. Tab visibility listener: update instantly when user switches back to this tab
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                loadOverview(true);
+            }
+        };
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            if (eventSource) eventSource.close();
+            if (retryTimer) clearTimeout(retryTimer);
+            clearInterval(pollInterval);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, []);
 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -163,7 +244,7 @@ export default function Dashboard() {
             if (createdProject?.id) {
                 navigate(`/projects/${createdProject.id}`);
             } else {
-                loadProjects();
+                loadOverview(false);
             }
         } catch { toast.error('Failed to create project'); }
     };
@@ -174,7 +255,7 @@ export default function Dashboard() {
         try {
             await fetchApi(`/projects/${id}`, { method: 'DELETE' });
             toast.success('Project deleted');
-            loadProjects();
+            loadOverview(false);
         } catch { toast.error('Failed to delete project'); }
     };
 
@@ -195,7 +276,7 @@ export default function Dashboard() {
             });
             setEditingId(null);
             toast.success('Project renamed');
-            loadProjects();
+            loadOverview(false);
         } catch { toast.error('Failed to rename project'); }
     };
 
@@ -307,6 +388,30 @@ export default function Dashboard() {
 
                 <div className="recent-calls-panel">
                     <div className="flex items-center gap-2" style={{ marginBottom: '0.5rem', justifyContent: 'flex-end' }}>
+                        <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.35rem',
+                            fontSize: '0.68rem',
+                            fontWeight: 700,
+                            letterSpacing: '0.04em',
+                            color: isLiveConnected ? '#22c55e' : 'var(--brand-amber)',
+                            background: isLiveConnected ? 'rgba(34,197,94,0.1)' : 'rgba(255,170,0,0.1)',
+                            border: `1px solid ${isLiveConnected ? 'rgba(34,197,94,0.25)' : 'rgba(255,170,0,0.25)'}`,
+                            borderRadius: 'var(--radius-pill)',
+                            padding: '0.15rem 0.5rem',
+                            textTransform: 'uppercase'
+                        }}>
+                            <span style={{
+                                width: 6,
+                                height: 6,
+                                borderRadius: '50%',
+                                background: isLiveConnected ? '#22c55e' : 'var(--brand-amber)',
+                                boxShadow: isLiveConnected ? '0 0 6px #22c55e' : 'none',
+                                display: 'inline-block'
+                            }} />
+                            {isLiveConnected ? 'REAL-TIME' : 'POLLING'}
+                        </span>
                         <Activity size={16} style={{ color: 'var(--brand-orange)' }} />
                         <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700 }}>{t('dashboard.recent_calls')}</h3>
                     </div>
@@ -314,7 +419,7 @@ export default function Dashboard() {
                     {recentCallCards.map((call, index) => (
                         <div
                             key={call?.created_at || `empty-${index}`}
-                            className="recent-call-card"
+                            className={`recent-call-card${index === 0 && newCallHighlight ? ' new-call-pulse' : ''}`}
                         >
                             {call ? (
                                 <>

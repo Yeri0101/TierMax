@@ -2,11 +2,18 @@ import { Context, Next } from 'hono';
 
 export const authMiddleware = async (c: Context, next: Next) => {
     const authHeader = c.req.header('Authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return c.json({ error: 'Unauthorized' }, 401);
+    const queryToken = c.req.query('token');
+
+    let token: string | undefined;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.split(' ')[1];
+    } else if (queryToken) {
+        token = queryToken;
     }
 
-    const token = authHeader.split(' ')[1];
+    if (!token) {
+        return c.json({ error: 'Unauthorized' }, 401);
+    }
 
     // Very simplistic check; in a real app, verify the JWT here
     if (token !== 'mock-admin-token-123') {

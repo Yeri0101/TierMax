@@ -1,13 +1,152 @@
 import { Hono } from 'hono';
+import { streamSSE } from 'hono/streaming';
 import { supabase } from '../db';
 import { authMiddleware } from '../middleware/auth';
 import { pauseProvider } from '../utils/limitTracker';
 import { getProjectHistory, repairProjectChannels } from '../utils/modelHealing';
+import { dashboardEvents } from '../utils/dashboardEvents';
 
 const projects = new Hono();
 
 // Apply auth middleware to all project routes
 projects.use('*', authMiddleware);
+
+projects.get('/dashboard-overview', async (c) => {
+    try {
+        const [projectsRes, logsRes, upstreamKeysRes] = await Promise.all([
+            supabase
+                .from('projects')
+                .select('*, gateway_keys(id, key_name, api_key)')
+                .order('created_at', { ascending: false }),
+            supabase
+                .from('request_logs')
+                .select('project_id, gateway_key_id, upstream_key_id, model, latency_ms, total_tokens, total_cost_usd, created_at')
+                .order('created_at', { ascending: false })
+                .limit(2000),
+            supabase
+                .from('upstream_keys')
+                .select('id, billing_type'),
+        ]);
+
+        if (projectsRes.error) return c.json({ error: projectsRes.error.message }, 500);
+
+        const projectsData = projectsRes.data || [];
+        const logs = logsRes.data || [];
+        const upstreamKeys = upstreamKeysRes.data || [];
+
+        const billingTypeMap = new Map(upstreamKeys.map((k: any) => [k.id, k.billing_type || 'paid']));
+        const projectNameMap = new Map(projectsData.map((p: any) => [p.id, p.name]));
+
+        const gwProjectMap = new Map();
+        projectsData.forEach((p: any) => {
+            (p.gateway_keys || []).forEach((gk: any) => gwProjectMap.set(gk.id, p.id));
+        });
+
+        let totalTokens = 0;
+        let actualCostUsd = 0;
+        let estimatedSavingsUsd = 0;
+        const latencyMap: Record<string, { sum: number; count: number }> = {};
+
+        for (const log of logs) {
+            totalTokens += (log.total_tokens || 0);
+            const cost = Number(log.total_cost_usd || 0);
+            const bType = log.upstream_key_id ? billingTypeMap.get(log.upstream_key_id) || 'paid' : 'paid';
+            if (bType === 'free') {
+                estimatedSavingsUsd += cost;
+            } else {
+                actualCostUsd += cost;
+            }
+
+            const projId = log.project_id || gwProjectMap.get(log.gateway_key_id);
+            if (projId && log.latency_ms != null) {
+                if (!latencyMap[projId]) latencyMap[projId] = { sum: 0, count: 0 };
+                latencyMap[projId].sum += log.latency_ms;
+                latencyMap[projId].count++;
+            }
+        }
+
+        const sanitizedProjects = projectsData.map((project: any) => {
+            const keys = (project.gateway_keys || []).map((gk: any) => {
+                const key = gk.api_key || '';
+                const key_preview = key.length > 9 ? `${key.slice(0, 4)}...${key.slice(-5)}` : `${key.slice(0, 4)}...`;
+                const { api_key: _removed, ...rest } = gk;
+                return { ...rest, key_preview };
+            });
+            const agg = latencyMap[project.id];
+            const avg_latency_ms = agg ? Math.round(agg.sum / agg.count) : null;
+            return { ...project, gateway_keys: keys, avg_latency_ms };
+        });
+
+        const recentCalls = logs
+            .filter((log: any) => !!log.created_at)
+            .map((log: any) => {
+                const projId = log.project_id || gwProjectMap.get(log.gateway_key_id);
+                return {
+                    project_id: projId,
+                    project_name: projId ? (projectNameMap.get(projId) || 'Proyecto') : 'Proyecto',
+                    model: log.model || '—',
+                    latency_ms: log.latency_ms ?? null,
+                    total_tokens: log.total_tokens ?? 0,
+                    created_at: log.created_at,
+                };
+            })
+            .slice(0, 3);
+
+        return c.json({
+            projects: sanitizedProjects,
+            recentCalls,
+            usageMetrics: {
+                totalTokens,
+                actualCostUsd: Number(actualCostUsd.toFixed(6)),
+                estimatedSavingsUsd: Number(estimatedSavingsUsd.toFixed(6)),
+            },
+        });
+    } catch (err: any) {
+        return c.json({ error: err.message || 'Failed to fetch dashboard overview' }, 500);
+    }
+});
+
+projects.get('/realtime-stream', async (c) => {
+    return streamSSE(c, async (stream) => {
+        await stream.writeSSE({
+            data: JSON.stringify({ type: 'connected', ts: Date.now() }),
+            event: 'connected',
+        });
+
+        const onNewRequest = async (entry: any) => {
+            try {
+                await stream.writeSSE({
+                    data: JSON.stringify({ type: 'new_request', entry }),
+                    event: 'new_request',
+                });
+            } catch {
+                // Client aborted
+            }
+        };
+
+        dashboardEvents.on('new_request', onNewRequest);
+
+        const pingInterval = setInterval(async () => {
+            try {
+                await stream.writeSSE({
+                    data: JSON.stringify({ type: 'ping' }),
+                    event: 'ping',
+                });
+            } catch {
+                clearInterval(pingInterval);
+            }
+        }, 15000);
+
+        stream.onAbort(() => {
+            clearInterval(pingInterval);
+            dashboardEvents.off('new_request', onNewRequest);
+        });
+
+        while (!stream.aborted) {
+            await stream.sleep(1000);
+        }
+    });
+});
 
 projects.get('/recent-calls', async (c) => {
     const { data: recentLogs, error: logsError } = await supabase

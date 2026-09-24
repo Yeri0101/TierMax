@@ -14,6 +14,7 @@ import {
 } from './freeTierGuardian';
 import { consultSystemOne } from './engineBridge';
 import { resolveModelOrHeal, HealingResult } from './modelHealing';
+import { notifyNewRequest } from './dashboardEvents';
 
 export type UsageBreakdown = {
     prompt_tokens: number;
@@ -88,6 +89,7 @@ export async function insertRequestLog(entry: {
         const timestamp = new Date().toISOString();
         console.error(`[${timestamp}] Logging failed:`, logErr);
     }
+    notifyNewRequest(entry);
 }
 
 export async function getPricingForModel(model: string, provider: string | null): Promise<PricingMatch | null> {
