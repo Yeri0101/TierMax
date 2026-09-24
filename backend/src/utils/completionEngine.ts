@@ -191,7 +191,7 @@ async function executeHighCapacityFailover({
         .from('upstream_keys')
         .select('*');
 
-    const highContextProviders = ['google', 'deepseek', 'openrouter', 'mistral'];
+    const highContextProviders = ['mimo', 'deepseek', 'openrouter', 'mistral'];
 
     // Combine project keys first, then gateway-wide keys
     const candidatePool = [...(projectKeys || [])];
@@ -210,10 +210,10 @@ async function executeHighCapacityFailover({
         });
 
     if (eligibleKeys.length === 0) {
-        console.error(`[CompletionEngine] High-Capacity Failover failed: No high-capacity upstream keys (Google/DeepSeek/OpenRouter) available in gateway.`);
+        console.error(`[CompletionEngine] High-Capacity Failover failed: No high-capacity upstream keys (Mimo/DeepSeek/OpenRouter) available in gateway.`);
         const errObj = {
             error: {
-                message: `Gateway Context Overflow: The prompt (${estimatedPromptTokens} tokens) exceeds available provider limits (413 Request Too Large), and no high-context provider (Google Gemini, DeepSeek, OpenRouter) is configured.`,
+                message: `Gateway Context Overflow: The prompt (${estimatedPromptTokens} tokens) exceeds available provider limits (413 Request Too Large), and no high-context provider (Mimo, DeepSeek, OpenRouter) is configured.`,
                 type: 'context_overflow_error',
                 code: 'context_length_exceeded'
             }
@@ -227,12 +227,12 @@ async function executeHighCapacityFailover({
     const startTime = Date.now();
 
     for (const upstream of eligibleKeys) {
-        let resolvedModel = 'gemini-2.5-flash';
+        let resolvedModel = 'mimo-v2.6-flash';
         let baseUrl = '';
 
-        if (upstream.provider === 'google' || upstream.provider === 'vertex') {
-            resolvedModel = 'gemini-2.5-flash';
-            baseUrl = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
+        if (upstream.provider === 'mimo') {
+            resolvedModel = 'mimo-v2.6-flash';
+            baseUrl = 'https://api.xiaomimimo.com/v1/chat/completions';
         } else if (upstream.provider === 'deepseek') {
             resolvedModel = 'deepseek-chat';
             baseUrl = 'https://api.deepseek.com/chat/completions';
@@ -300,7 +300,7 @@ async function executeHighCapacityFailover({
             }
 
             const latencyMs = Date.now() - startTime;
-            const healingReason = `Auto-healed from 413 context overflow (${estimatedPromptTokens} tokens exceeded ${reason}). Routed to 1M-context ${resolvedModel} (${upstream.provider}).`;
+            const healingReason = `Auto-healed from 413 context overflow (${estimatedPromptTokens} tokens exceeded ${reason}). Routed to ${resolvedModel} (${upstream.provider}).`;
             console.log(`[CompletionEngine] ✅ High-Capacity Failover SUCCESS via ${upstream.provider} (${resolvedModel}) in ${latencyMs}ms`);
 
             // Handle Streaming

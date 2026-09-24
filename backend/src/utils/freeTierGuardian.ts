@@ -81,6 +81,12 @@ export const DEFAULT_FREE_TIER_PROFILES: Record<string, RateLimitProfile> = {
         rpd: 10_000,
         tpd: 20_000_000,
     },
+    mimo: {
+        rpm: 60,
+        tpm: 200_000,
+        rpd: 10_000,
+        tpd: 50_000_000,
+    },
     default_paid: {
         rpm: 300,
         tpm: 500_000,

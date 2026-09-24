@@ -205,6 +205,9 @@ export function resolveModelOrHeal(
         } else if (normalizedReq.includes('qwen')) {
             resolvedModel = configuredModels.find(m => m.includes('qwen')) || null;
             if (resolvedModel) healingReason = `Auto-healed Qwen model to active project variant (${resolvedModel})`;
+        } else if (normalizedReq.includes('mimo')) {
+            resolvedModel = configuredModels.find(m => m.includes('mimo')) || null;
+            if (resolvedModel) healingReason = `Auto-healed Mimo model to active project variant (${resolvedModel})`;
         }
     }
 
