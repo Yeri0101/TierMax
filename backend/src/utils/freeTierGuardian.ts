@@ -70,10 +70,10 @@ export const DEFAULT_FREE_TIER_PROFILES: Record<string, RateLimitProfile> = {
         tpd: 5_000_000,
     },
     openrouter: {
-        rpm: 20,            // OpenRouter free models
-        tpm: 50_000,
-        rpd: 200,
-        tpd: 1_000_000,
+        rpm: 30,            // OpenRouter free models
+        tpm: 200_000,
+        rpd: 10_000,
+        tpd: 50_000_000,
     },
     puter: {
         rpm: 60,

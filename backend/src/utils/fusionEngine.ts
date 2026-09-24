@@ -78,7 +78,7 @@ export function selectFusionPanel(gatewayKey: any, body?: any): { panel: string[
     let selectedPanel: string[] = [];
 
     if (manualModels.length >= 3) {
-        // Exactly or more than 3 specified manually
+        // Exactly or more than 3 specified manually in request
         selectedPanel = manualModels.slice(0, 3);
     } else if (manualModels.length > 0) {
         // Less than 3 specified manually; complement with defaults
@@ -90,36 +90,34 @@ export function selectFusionPanel(gatewayKey: any, body?: any): { panel: string[
             }
         }
     } else {
-        // 3. Check gateway key's models
-        const keyModels: string[] = (gatewayKey?.gateway_key_models || [])
-            .map((m: any) => m.model_name)
-            .filter((name: string) => name && name !== 'fusion' && name !== 'openclaw/fusion');
+        // 3. Check EngineConfig default fusion models (UI settings - highest priority for fixed panel)
+        try {
+            const engineConfig = getEngineConfig(false);
+            if (engineConfig?.fusionDefaultModels && Array.isArray(engineConfig.fusionDefaultModels) && engineConfig.fusionDefaultModels.length >= 3) {
+                selectedPanel = engineConfig.fusionDefaultModels.slice(0, 3);
+            }
+        } catch (_) {}
 
-        const uniqueKeyModels = Array.from(new Set(keyModels));
+        // 4. If not configured in EngineConfig, check gateway key's models
+        if (selectedPanel.length === 0) {
+            const keyModels: string[] = (gatewayKey?.gateway_key_models || [])
+                .map((m: any) => m.model_name)
+                .filter((name: string) => name && name !== 'fusion' && name !== 'openclaw/fusion');
 
-        if (uniqueKeyModels.length >= 3) {
-            selectedPanel = uniqueKeyModels.slice(0, 3);
-        } else {
-            // 4. Check EngineConfig default fusion models (UI settings)
-            try {
-                const engineConfig = getEngineConfig(false);
-                if (engineConfig?.fusionDefaultModels && Array.isArray(engineConfig.fusionDefaultModels) && engineConfig.fusionDefaultModels.length >= 3) {
-                    selectedPanel = engineConfig.fusionDefaultModels.slice(0, 3);
-                }
-            } catch (_) {}
+            const uniqueKeyModels = Array.from(new Set(keyModels));
 
-            if (selectedPanel.length === 0) {
-                if (uniqueKeyModels.length > 0) {
-                    selectedPanel = [...uniqueKeyModels];
-                    for (const candidate of DEFAULT_FUSION_PANEL) {
-                        if (selectedPanel.length >= 3) break;
-                        if (!selectedPanel.includes(candidate)) {
-                            selectedPanel.push(candidate);
-                        }
+            if (uniqueKeyModels.length >= 3) {
+                selectedPanel = uniqueKeyModels.slice(0, 3);
+            } else if (uniqueKeyModels.length > 0) {
+                selectedPanel = [...uniqueKeyModels];
+                for (const candidate of DEFAULT_FUSION_PANEL) {
+                    if (selectedPanel.length >= 3) break;
+                    if (!selectedPanel.includes(candidate)) {
+                        selectedPanel.push(candidate);
                     }
-                } else {
-                    selectedPanel = DEFAULT_FUSION_PANEL.slice(0, 3);
                 }
+            } else {
+                selectedPanel = DEFAULT_FUSION_PANEL.slice(0, 3);
             }
         }
     }
@@ -134,8 +132,8 @@ export function selectFusionPanel(gatewayKey: any, body?: any): { panel: string[
             }
         } catch (_) {}
     }
-    if (!judge || !selectedPanel.includes(judge)) {
-        judge = selectedPanel.find(m => m.includes('deepseek') || m.includes('qwen') || m.includes('llama')) || selectedPanel[0];
+    if (!judge) {
+        judge = selectedPanel.find(m => m.includes('mimo') || m.includes('deepseek') || m.includes('qwen') || m.includes('llama')) || selectedPanel[0];
     }
 
     return { panel: selectedPanel, judge };

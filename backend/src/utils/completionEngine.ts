@@ -169,6 +169,55 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
     // Check if the gateway key is allowed to use this model
     let allowed = allowedModels.filter((m: any) => m.model_name === requestedModel);
 
+    // Cross-project resolution for internal calls (Virtual Consensus Fusion)
+    if (allowed.length === 0 && isInternalCall) {
+        // 1. Direct model lookup across all projects
+        const { data: globalMatches } = await supabase
+            .from('gateway_key_models')
+            .select('upstream_key_id, model_name, upstream_model_name')
+            .eq('model_name', requestedModel);
+
+        if (globalMatches && globalMatches.length > 0) {
+            allowed = globalMatches;
+        } else {
+            // 2. Provider-heuristic lookup across all upstream_keys in the gateway
+            const { data: allUpstreams } = await supabase
+                .from('upstream_keys')
+                .select('id, provider');
+
+            let matchingGlobal: any[] = [];
+            const reqLower = requestedModel.toLowerCase();
+            if (reqLower.includes('mimo')) {
+                matchingGlobal = (allUpstreams || []).filter((k: any) => k.provider === 'mimo');
+            } else if (reqLower.includes('deepseek')) {
+                matchingGlobal = (allUpstreams || []).filter((k: any) => k.provider === 'deepseek');
+            } else if (reqLower.includes('gemini') || reqLower.includes('google')) {
+                matchingGlobal = (allUpstreams || []).filter((k: any) => k.provider === 'google' || k.provider === 'vertex');
+            } else if (reqLower.includes('groq') || reqLower.includes('llama')) {
+                matchingGlobal = (allUpstreams || []).filter((k: any) => k.provider === 'groq');
+            } else if (reqLower.includes('qwen') || reqLower.includes('cerebras')) {
+                matchingGlobal = (allUpstreams || []).filter((k: any) => k.provider === 'cerebras' || k.provider === 'groq');
+            } else if (reqLower.includes('mistral') || reqLower.includes('codestral')) {
+                matchingGlobal = (allUpstreams || []).filter((k: any) => k.provider === 'mistral');
+            } else if (reqLower.includes('claude')) {
+                matchingGlobal = (allUpstreams || []).filter((k: any) => k.provider === 'puter');
+            }
+
+            if (matchingGlobal.length === 0) {
+                // Fallback to openrouter
+                matchingGlobal = (allUpstreams || []).filter((k: any) => k.provider === 'openrouter');
+            }
+
+            if (matchingGlobal.length > 0) {
+                allowed = matchingGlobal.map((k: any) => ({
+                    upstream_key_id: k.id,
+                    model_name: requestedModel,
+                    upstream_model_name: null,
+                }));
+            }
+        }
+    }
+
     let isHealed = false;
     let healingInfo: HealingResult | null = null;
 
@@ -394,8 +443,12 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
 
         if (!guardianCheck.canProceedImmediately) {
             if (guardianCheck.state.status === 'daily_exhausted') {
-                console.log(`[FreeTierGuardian] Skipping key ${upstream.id} (${upstream.provider}): Daily free tier limit reached.`);
-                continue;
+                const hasAlternative = candidates.some((c: any) => c.upstream_key_id !== upstream.id);
+                if (hasAlternative) {
+                    console.log(`[FreeTierGuardian] Skipping key ${upstream.id} (${upstream.provider}): Daily free tier limit reached, rotating to alternative.`);
+                    continue;
+                }
+                console.warn(`[FreeTierGuardian] Key ${upstream.id} (${upstream.provider}) reached daily soft limit, but no alternative available; proceeding with request.`);
             }
             if (guardianCheck.shouldWaitMs > 0 && guardianCheck.shouldWaitMs <= 6000) {
                 console.log(`[FreeTierGuardian] Applying smooth rate delay of ${guardianCheck.shouldWaitMs}ms for ${upstream.provider} to prevent 429`);
