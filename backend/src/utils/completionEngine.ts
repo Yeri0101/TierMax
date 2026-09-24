@@ -162,7 +162,7 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
     const allowedModels = gatewayKey.gateway_key_models || [];
     let requestedModel: string = body.model || '';
 
-    if (isInternalCall) {
+    if (isInternalCall && !returnRawStream) {
         body.stream = false;
     }
 
@@ -341,15 +341,20 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
     const candidateUpstreamIds = candidates.map((m: any) => m.upstream_key_id);
     const { data: providerMeta } = await supabase
         .from('upstream_keys')
-        .select('id, provider')
+        .select('id, provider, billing_type')
         .in('id', candidateUpstreamIds);
 
     const providerMap: Record<string, string> = {};
-    (providerMeta || []).forEach((row: any) => { providerMap[row.id] = row.provider; });
+    const billingMap: Record<string, string> = {};
+    (providerMeta || []).forEach((row: any) => {
+        providerMap[row.id] = row.provider;
+        billingMap[row.id] = row.billing_type || 'free';
+    });
 
     const enrichedCandidates = candidates.map((m: any) => ({
         ...m,
         provider: providerMap[m.upstream_key_id] || 'unknown',
+        billing_type: billingMap[m.upstream_key_id] || 'free',
     }));
 
     const estimatedTok = estimateTokenCount(body.messages || []);
@@ -366,8 +371,29 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
     const routingTier = jevDecision.tier;
     candidates = filterCandidatesByTier(routingTier, enrichedCandidates);
 
+    // Free Tier Priority Engine: Separate free tier keys and paid/premium keys.
+    // Free keys are rotated via round-robin; paid keys are placed strictly as secondary fallbacks!
+    const freeCandidates = candidates.filter((cand: any) => cand.billing_type === 'free');
+    const paidCandidates = candidates.filter((cand: any) => cand.billing_type !== 'free');
+
+    const counterKey = `${gatewayKey.id}:${requestedModel}`;
+    if (typeof modelCounters[counterKey] === 'undefined') {
+        modelCounters[counterKey] = 0;
+    }
+
+    if (freeCandidates.length > 0) {
+        const freeStartIndex = modelCounters[counterKey] % freeCandidates.length;
+        modelCounters[counterKey]++;
+        const rotatedFree = freeCandidates.map((_, i) => freeCandidates[(freeStartIndex + i) % freeCandidates.length]);
+        candidates = [...rotatedFree, ...paidCandidates];
+    } else if (paidCandidates.length > 0) {
+        const paidStartIndex = modelCounters[counterKey] % paidCandidates.length;
+        modelCounters[counterKey]++;
+        candidates = paidCandidates.map((_, i) => paidCandidates[(paidStartIndex + i) % paidCandidates.length]);
+    }
+
     const tsRouter = new Date().toISOString();
-    console.log(`[${tsRouter}] [DualEngine] tier=${routingTier} engine=${jevDecision.decisionSource} confidence=${jevDecision.confidenceScore}% estimatedTokens=${estimatedTok} candidatesAfterFilter=${candidates.length}/${enrichedCandidates.length}`);
+    console.log(`[${tsRouter}] [DualEngine] tier=${routingTier} engine=${jevDecision.decisionSource} confidence=${jevDecision.confidenceScore}% estimatedTokens=${estimatedTok} candidatesAfterFilter=${candidates.length}/${enrichedCandidates.length} (free=${freeCandidates.length}, paid=${paidCandidates.length})`);
 
     if (c) {
         c.header('X-TierMax-Engine', jevDecision.decisionSource);
@@ -383,15 +409,6 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
         return { ok: false, status: 403, error: errObj.error };
     }
 
-    // Round-robin load balancing
-    const counterKey = `${gatewayKey.id}:${requestedModel}`;
-    if (typeof modelCounters[counterKey] === 'undefined') {
-        modelCounters[counterKey] = 0;
-    }
-
-    const startIndex = modelCounters[counterKey] % candidates.length;
-    modelCounters[counterKey]++;
-
     const startTime = Date.now();
     let finalResponse: any = null;
     let finalStatus = 500;
@@ -404,10 +421,9 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
     let finalErrorData: any = null;
     const estimatedPromptTokens = estimateTokenCount(body.messages || []);
 
-    // Fallback Loop
+    // Fallback Loop: Tries free candidates first, then paid candidates only if free fails
     for (let attempt = 0; attempt < candidates.length; attempt++) {
-        const selectedIndex = (startIndex + attempt) % candidates.length;
-        const selectedMapping = candidates[selectedIndex];
+        const selectedMapping = candidates[attempt];
 
         usedUpstreamKeyId = selectedMapping.upstream_key_id;
 

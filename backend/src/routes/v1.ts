@@ -310,6 +310,7 @@ v1.post('/chat/completions', async (c) => {
                                 const streamRes = await executeCompletionEngine({
                                     body: subBody,
                                     gatewayKey,
+                                    isInternalCall: true,
                                     returnRawStream: true,
                                 });
                                 if (streamRes.rawResponse?.body) {
@@ -395,6 +396,7 @@ v1.post('/messages', async (c) => {
                                 const streamRes = await executeCompletionEngine({
                                     body: subBody,
                                     gatewayKey,
+                                    isInternalCall: true,
                                     returnRawStream: true,
                                 });
                                 if (streamRes.rawResponse?.body) {
