@@ -558,11 +558,17 @@ export default function ProjectDetail() {
         if (modelNames.length === 0) return;
         const newSelections: { upstream_key_id: string; model_name: string }[] = [];
         modelNames.forEach(model_name => {
-            availableModels.forEach(am => {
-                if (am.models.some(m => m.id === model_name)) {
-                    newSelections.push({ upstream_key_id: am.upstream_key_id, model_name });
+            let matchedKeyId = '';
+            for (const am of availableModels) {
+                if (am.models?.some((m: any) => (m.id || m) === model_name)) {
+                    matchedKeyId = am.upstream_key_id;
+                    break;
                 }
-            });
+            }
+            if (!matchedKeyId) {
+                matchedKeyId = providers[0]?.id || '';
+            }
+            newSelections.push({ upstream_key_id: matchedKeyId, model_name });
         });
         try {
             await fetchApi(`/gateway-keys/${gwId}/models`, { method: 'POST', body: JSON.stringify({ models: newSelections }) });
@@ -570,6 +576,39 @@ export default function ProjectDetail() {
             toast.success('Models added to gateway');
             loadData();
         } catch { toast.error('Failed to add models'); }
+    };
+
+    const handleAddCustomModelToGateway = async (gwId: string, modelName?: string) => {
+        const targetModel = (modelName || addModelSearch[gwId] || '').trim();
+        if (!targetModel) {
+            toast.error('Por favor escribe el nombre del modelo');
+            return;
+        }
+
+        let matchedKeyId = '';
+        for (const am of availableModels) {
+            if (am.models?.some((m: any) => (m.id || m) === targetModel)) {
+                matchedKeyId = am.upstream_key_id;
+                break;
+            }
+        }
+        if (!matchedKeyId) {
+            matchedKeyId = providers[0]?.id || '';
+        }
+
+        try {
+            await fetchApi(`/gateway-keys/${gwId}/models`, {
+                method: 'POST',
+                body: JSON.stringify({
+                    models: [{ upstream_key_id: matchedKeyId, model_name: targetModel }]
+                })
+            });
+            setAddModelSearch(prev => ({ ...prev, [gwId]: '' }));
+            toast.success(`Modelo "${targetModel}" agregado correctamente`);
+            loadData();
+        } catch (err: any) {
+            toast.error(err.message || 'Error al agregar modelo manual');
+        }
     };
 
     const handleDeleteModelFromGateway = async (gwId: string, modelName: string) => {
@@ -1466,7 +1505,7 @@ export default function ProjectDetail() {
                                                     ))}
                                                 </div>
 
-                                                {availableModels.length > 0 && (
+                                                {(availableModels.length > 0 || providers.length > 0) && (
                                                     <div style={{ marginTop: '0.75rem' }}>
                                                         {!expandedAddModels[g.id] ? (
                                                             <button onClick={() => setExpandedAddModels(prev => ({ ...prev, [g.id]: true }))} className="btn btn-ghost btn-sm">
@@ -1476,27 +1515,47 @@ export default function ProjectDetail() {
                                                             <div className="flex gap-2" style={{ alignItems: 'flex-start', flexDirection: 'column' }}>
                                                                 <input
                                                                     type="text"
-                                                                    placeholder="Buscar modelo para agregar..."
+                                                                    placeholder="Buscar o escribir nombre de modelo (ej. fusion, mimo-v2.6-flash)..."
                                                                     value={addModelSearch[g.id] || ''}
                                                                     onChange={e => setAddModelSearch(prev => ({ ...prev, [g.id]: e.target.value }))}
+                                                                    onKeyDown={e => {
+                                                                        if (e.key === 'Enter' && addModelSearch[g.id]?.trim()) {
+                                                                            e.preventDefault();
+                                                                            handleAddCustomModelToGateway(g.id);
+                                                                        }
+                                                                    }}
                                                                     style={{ width: '100%', padding: '0.5rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-default)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '0.8rem' }}
                                                                 />
-                                                                <div className="flex gap-2" style={{ width: '100%', alignItems: 'flex-start' }}>
-                                                                    <select multiple
-                                                                        value={gatewayKeyBulkModels[g.id] || []}
-                                                                        onChange={e => setGatewayKeyBulkModels(prev => ({ ...prev, [g.id]: Array.from(e.target.selectedOptions, o => o.value) }))}
-                                                                        style={{ flex: 1, height: 110, padding: '0.4rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--brand-orange)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', fontSize: '0.8rem', fontFamily: 'var(--font-mono)' }}
-                                                                    >
-                                                                        {Array.from(new Set(availableModels.flatMap(am => am.models.map(m => m.id)))).sort()
-                                                                            .filter(mid => !g.gateway_key_models?.some(gm => gm.model_name === mid))
-                                                                            .filter(mid => mid.toLowerCase().includes((addModelSearch[g.id] || '').toLowerCase()))
-                                                                            .map(mid => <option key={mid} value={mid}>{mid}</option>)}
-                                                                    </select>
-                                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                                                                        <button onClick={() => { handleAddModelsToGateway(g.id); setExpandedAddModels(prev => ({ ...prev, [g.id]: false })); }} className="btn btn-primary btn-sm">Add</button>
-                                                                        <button onClick={() => setExpandedAddModels(prev => ({ ...prev, [g.id]: false }))} className="btn btn-secondary btn-sm">Cancel</button>
+                                                                {addModelSearch[g.id]?.trim() && (
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%', marginTop: '0.2rem' }}>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => handleAddCustomModelToGateway(g.id)}
+                                                                            className="btn btn-secondary btn-sm"
+                                                                            style={{ fontSize: '0.75rem', borderColor: 'var(--brand-orange)', color: 'var(--brand-orange)' }}
+                                                                        >
+                                                                            ➕ Agregar "{addModelSearch[g.id]?.trim()}" manualmente
+                                                                        </button>
                                                                     </div>
-                                                                </div>
+                                                                )}
+                                                                {availableModels.length > 0 && (
+                                                                    <div className="flex gap-2" style={{ width: '100%', alignItems: 'flex-start', marginTop: '0.25rem' }}>
+                                                                        <select multiple
+                                                                            value={gatewayKeyBulkModels[g.id] || []}
+                                                                            onChange={e => setGatewayKeyBulkModels(prev => ({ ...prev, [g.id]: Array.from(e.target.selectedOptions, o => o.value) }))}
+                                                                            style={{ flex: 1, height: 110, padding: '0.4rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--brand-orange)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', fontSize: '0.8rem', fontFamily: 'var(--font-mono)' }}
+                                                                        >
+                                                                            {Array.from(new Set(availableModels.flatMap(am => am.models?.map((m: any) => m.id || m) || []))).sort()
+                                                                                .filter(mid => !g.gateway_key_models?.some(gm => gm.model_name === mid))
+                                                                                .filter(mid => mid.toLowerCase().includes((addModelSearch[g.id] || '').toLowerCase()))
+                                                                                .map(mid => <option key={mid} value={mid}>{mid}</option>)}
+                                                                        </select>
+                                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                                                            <button onClick={() => { handleAddModelsToGateway(g.id); setExpandedAddModels(prev => ({ ...prev, [g.id]: false })); }} className="btn btn-primary btn-sm">Add Selected</button>
+                                                                            <button onClick={() => setExpandedAddModels(prev => ({ ...prev, [g.id]: false }))} className="btn btn-secondary btn-sm">Close</button>
+                                                                        </div>
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         )}
                                                     </div>

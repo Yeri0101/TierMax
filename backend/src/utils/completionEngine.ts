@@ -384,12 +384,12 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
     if (freeCandidates.length > 0) {
         const freeStartIndex = modelCounters[counterKey] % freeCandidates.length;
         modelCounters[counterKey]++;
-        const rotatedFree = freeCandidates.map((_, i) => freeCandidates[(freeStartIndex + i) % freeCandidates.length]);
+        const rotatedFree = freeCandidates.map((_: any, i: number) => freeCandidates[(freeStartIndex + i) % freeCandidates.length]);
         candidates = [...rotatedFree, ...paidCandidates];
     } else if (paidCandidates.length > 0) {
         const paidStartIndex = modelCounters[counterKey] % paidCandidates.length;
         modelCounters[counterKey]++;
-        candidates = paidCandidates.map((_, i) => paidCandidates[(paidStartIndex + i) % paidCandidates.length]);
+        candidates = paidCandidates.map((_: any, i: number) => paidCandidates[(paidStartIndex + i) % paidCandidates.length]);
     }
 
     const tsRouter = new Date().toISOString();

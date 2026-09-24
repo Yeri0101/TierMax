@@ -122,8 +122,11 @@ export default function EngineSettings() {
 
             if (modelsList.length > 0) {
                 const targetModel = currentModelToKeep || config.managerModel;
-                if (targetModel && modelsList.includes(targetModel)) {
+                if (targetModel) {
                     setConfig(prev => ({ ...prev, managerModel: targetModel }));
+                    if (!modelsList.includes(targetModel)) {
+                        setIsCustomModel(true);
+                    }
                 } else {
                     const preferred = modelsList.find((m: string) =>
                         m.includes('flash') || m.includes('mini') || m.includes('versatile') || m.includes('chat')
@@ -153,7 +156,7 @@ export default function EngineSettings() {
                 ? config.fusionDefaultJudge
                 : (config.fusionDefaultModels?.[slotIndex] || '');
 
-            if (!models.includes(currentVal || '')) {
+            if (!currentVal) {
                 const preferred = models.find((m: string) =>
                     m.includes('flash') || m.includes('mini') || m.includes('chat') || m.includes('versatile')
                 ) || models[0];
@@ -241,6 +244,10 @@ export default function EngineSettings() {
                 } else {
                     setSelectedSource(`manual:${data.managerProvider || 'google'}`);
                 }
+
+                if (data.fusionDefaultModels || data.fusionDefaultJudge) {
+                    setFusionSlotManual([true, true, true, true]);
+                }
             }
         } catch (err: any) {
             console.error('Failed to load engine config:', err);
@@ -312,6 +319,9 @@ export default function EngineSettings() {
             });
 
             if (res.success) {
+                if (res.config) {
+                    setConfig(prev => ({ ...prev, ...res.config }));
+                }
                 setSaveSuccess(t('engine.saved_success') || 'Engine configurations saved successfully!');
                 setTimeout(() => setSaveSuccess(''), 4000);
             }

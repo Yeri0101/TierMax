@@ -63,13 +63,21 @@ const DEFAULT_ENGINE_CONFIG: EngineConfig = {
 
 let currentConfig: EngineConfig = { ...DEFAULT_ENGINE_CONFIG };
 
-// Local config persistence file for persistence across restarts
-const CONFIG_FILE_PATH = path.resolve(process.cwd(), '.engine_config.json');
+function getResolvedConfigPath(): string {
+    const fromDir = path.resolve(__dirname, '../../.engine_config.json');
+    if (fs.existsSync(fromDir)) return fromDir;
+    const fromCwd = path.resolve(process.cwd(), '.engine_config.json');
+    if (fs.existsSync(fromCwd)) return fromCwd;
+    const fromCwdBackend = path.resolve(process.cwd(), 'backend', '.engine_config.json');
+    if (fs.existsSync(fromCwdBackend)) return fromCwdBackend;
+    return fromDir;
+}
 
 function loadPersistedConfig() {
     try {
-        if (fs.existsSync(CONFIG_FILE_PATH)) {
-            const raw = fs.readFileSync(CONFIG_FILE_PATH, 'utf-8');
+        const filePath = getResolvedConfigPath();
+        if (fs.existsSync(filePath)) {
+            const raw = fs.readFileSync(filePath, 'utf-8');
             const parsed = JSON.parse(raw);
             currentConfig = { ...DEFAULT_ENGINE_CONFIG, ...parsed };
         }
@@ -90,6 +98,7 @@ export function isMaskedOrPreviewKey(key?: string): boolean {
 }
 
 export function getEngineConfig(maskKeys = true): EngineConfig {
+    loadPersistedConfig();
     if (!maskKeys) return { ...currentConfig };
 
     return {
@@ -100,6 +109,7 @@ export function getEngineConfig(maskKeys = true): EngineConfig {
 }
 
 export function updateEngineConfig(updates: Partial<EngineConfig>): EngineConfig {
+    loadPersistedConfig();
     // Only update API keys if not sent as masked/preview strings
     const cleanUpdates: Partial<EngineConfig> = { ...updates };
     if (cleanUpdates.typesafeApiKey && isMaskedOrPreviewKey(cleanUpdates.typesafeApiKey)) {
@@ -116,7 +126,8 @@ export function updateEngineConfig(updates: Partial<EngineConfig>): EngineConfig
     currentConfig = { ...currentConfig, ...cleanUpdates };
 
     try {
-        fs.writeFileSync(CONFIG_FILE_PATH, JSON.stringify(currentConfig, null, 2), 'utf-8');
+        const filePath = getResolvedConfigPath();
+        fs.writeFileSync(filePath, JSON.stringify(currentConfig, null, 2), 'utf-8');
     } catch (err) {
         console.error('[EngineBridge] Failed to persist config to disk:', err);
     }

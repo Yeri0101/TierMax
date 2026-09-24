@@ -94,15 +94,28 @@ gatewayKeys.post('/:id/models', async (c) => {
     const { models } = await c.req.json();
 
     if (models && models.length > 0) {
-        const inserts = models.map((m: any) => ({
-            gateway_key_id: id,
-            upstream_key_id: m.upstream_key_id,
-            model_name: m.model_name
-        }));
+        const { data: existing } = await supabase
+            .from('gateway_key_models')
+            .select('model_name')
+            .eq('gateway_key_id', id);
 
-        const { error: modelError } = await supabase.from('gateway_key_models').insert(inserts);
-        if (modelError) {
-            return c.json({ error: modelError.message }, 500);
+        const existingNames = new Set((existing || []).map((r: any) => r.model_name));
+
+        const inserts = models
+            .filter((m: any) => m && m.model_name && !existingNames.has(m.model_name.trim()))
+            .map((m: any) => ({
+                id: crypto.randomUUID(),
+                gateway_key_id: id,
+                upstream_key_id: (m.upstream_key_id && String(m.upstream_key_id).trim() !== '') ? m.upstream_key_id : null,
+                model_name: m.model_name.trim()
+            }));
+
+        if (inserts.length > 0) {
+            const { error: modelError } = await supabase.from('gateway_key_models').insert(inserts);
+            if (modelError) {
+                console.error('[gatewayKeys] Failed to map models:', modelError);
+                return c.json({ error: modelError.message }, 500);
+            }
         }
     }
     return c.json({ success: true }, 201);
