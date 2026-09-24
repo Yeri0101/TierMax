@@ -20,6 +20,7 @@ interface EngineConfig {
     managerUpstreamKeyId?: string;
     fusionDefaultModels?: string[];
     fusionDefaultJudge?: string;
+    fusionSlotProjects?: string[];
 }
 
 const PROVIDER_BASE_URLS: Record<string, string> = {
@@ -53,6 +54,7 @@ export default function EngineSettings() {
         managerUpstreamKeyId: '',
         fusionDefaultModels: ['deepseek-chat', 'qwen/qwen3.8-27b', 'moonshotai/kimi-k3'],
         fusionDefaultJudge: 'deepseek-chat',
+        fusionSlotProjects: ['', '', '', ''],
     });
 
     const [typesafeKeyInput, setTypesafeKeyInput] = useState('');
@@ -94,30 +96,57 @@ export default function EngineSettings() {
         loadConfig();
     }, []);
 
-    const fetchModelsForKey = async (upstreamKeyId: string): Promise<string[]> => {
-        if (!upstreamKeyId) return [];
-        if (modelsCache[upstreamKeyId] && modelsCache[upstreamKeyId].length > 0) {
-            return modelsCache[upstreamKeyId];
+    const fetchModelsForKey = async (sourceId: string): Promise<string[]> => {
+        if (!sourceId) return [];
+        if (modelsCache[sourceId] && modelsCache[sourceId].length > 0) {
+            return modelsCache[sourceId];
         }
-        setLoadingKeyModels(prev => ({ ...prev, [upstreamKeyId]: true }));
+        setLoadingKeyModels(prev => ({ ...prev, [sourceId]: true }));
         try {
-            const res = await fetchApi(`/providers/${upstreamKeyId}/models`);
-            const modelsList = (res?.models || []).map((m: any) => typeof m === 'string' ? m : m.id || m.name).filter(Boolean);
-            setModelsCache(prev => ({ ...prev, [upstreamKeyId]: modelsList }));
+            let modelsList: string[] = [];
+            if (sourceId.startsWith('project:')) {
+                const projId = sourceId.replace('project:', '');
+                // 1. Try project models endpoint
+                try {
+                    const projRes = await fetchApi(`/projects/${projId}/models`);
+                    if (projRes?.models && Array.isArray(projRes.models) && projRes.models.length > 0) {
+                        modelsList = projRes.models;
+                    }
+                } catch {}
+
+                // 2. Query upstream keys of this project to get full available catalog
+                const projKeys = upstreamKeys.filter((k: any) => k.project_id === projId);
+                for (const pk of projKeys) {
+                    try {
+                        const res = await fetchApi(`/providers/${pk.id}/models`);
+                        const kModels = (res?.models || []).map((m: any) => typeof m === 'string' ? m : m.id || m.name).filter(Boolean);
+                        kModels.forEach((m: string) => {
+                            if (!modelsList.includes(m)) modelsList.push(m);
+                        });
+                        if (modelsList.length > 0) break;
+                    } catch {}
+                }
+            } else {
+                const keyId = sourceId.replace('key:', '');
+                const res = await fetchApi(`/providers/${keyId}/models`);
+                modelsList = (res?.models || []).map((m: any) => typeof m === 'string' ? m : m.id || m.name).filter(Boolean);
+            }
+
+            setModelsCache(prev => ({ ...prev, [sourceId]: modelsList }));
             return modelsList;
         } catch (err) {
-            console.warn(`[EngineSettings] Could not fetch models for upstream key ${upstreamKeyId}:`, err);
+            console.warn(`[EngineSettings] Could not fetch models for source ${sourceId}:`, err);
             return [];
         } finally {
-            setLoadingKeyModels(prev => ({ ...prev, [upstreamKeyId]: false }));
+            setLoadingKeyModels(prev => ({ ...prev, [sourceId]: false }));
         }
     };
 
-    const loadModelsForProvider = async (upstreamKeyId: string, currentModelToKeep?: string) => {
-        if (!upstreamKeyId) return;
+    const loadModelsForProvider = async (sourceId: string, currentModelToKeep?: string) => {
+        if (!sourceId) return;
         setLoadingModels(true);
         try {
-            const modelsList = await fetchModelsForKey(upstreamKeyId);
+            const modelsList = await fetchModelsForKey(sourceId);
             setApiModels(modelsList);
 
             if (modelsList.length > 0) {
@@ -143,6 +172,7 @@ export default function EngineSettings() {
         const updatedKeys = [...fusionSlotKeys];
         updatedKeys[slotIndex] = newKeyId;
         setFusionSlotKeys(updatedKeys);
+        setConfig(prev => ({ ...prev, fusionSlotProjects: updatedKeys }));
 
         if (!newKeyId) return;
 
@@ -162,12 +192,12 @@ export default function EngineSettings() {
                 ) || models[0];
 
                 if (slotIndex === 3) {
-                    setConfig(prev => ({ ...prev, fusionDefaultJudge: preferred }));
+                    setConfig(prev => ({ ...prev, fusionDefaultJudge: preferred, fusionSlotProjects: updatedKeys }));
                 } else {
                     setConfig(prev => {
                         const next = [...(prev.fusionDefaultModels || ['deepseek-chat', 'qwen/qwen3.8-27b', 'moonshotai/kimi-k3'])];
                         next[slotIndex] = preferred;
-                        return { ...prev, fusionDefaultModels: next };
+                        return { ...prev, fusionDefaultModels: next, fusionSlotProjects: updatedKeys };
                     });
                 }
             }
@@ -176,7 +206,8 @@ export default function EngineSettings() {
 
     const handleApplyProjectToAllSlots = async (newKeyId: string) => {
         if (!newKeyId) return;
-        setFusionSlotKeys([newKeyId, newKeyId, newKeyId, newKeyId]);
+        const allFour = [newKeyId, newKeyId, newKeyId, newKeyId];
+        setFusionSlotKeys(allFour);
         setFusionSlotManual([false, false, false, false]);
 
         const models = await fetchModelsForKey(newKeyId);
@@ -190,8 +221,11 @@ export default function EngineSettings() {
                     ...prev,
                     fusionDefaultModels: [m1, m2, m3],
                     fusionDefaultJudge: judge,
+                    fusionSlotProjects: allFour,
                 };
             });
+        } else {
+            setConfig(prev => ({ ...prev, fusionSlotProjects: allFour }));
         }
     };
 
@@ -230,19 +264,32 @@ export default function EngineSettings() {
                 if (data.typesafeApiKey) setTypesafeKeyInput(data.typesafeApiKey);
                 if (data.managerApiKey) setManagerKeyInput(data.managerApiKey);
 
-                if (data.managerUpstreamKeyId) {
+                if (data.managerProjectId && !data.managerUpstreamKeyId) {
+                    setSelectedSource(`project:${data.managerProjectId}`);
+                    const projKeys = (providersData || []).filter((k: any) => k.project_id === data.managerProjectId);
+                    setManagerKeyInput(`🔄 Rotación activa (${projKeys.length} llaves en pool)`);
+                    loadModelsForProvider(`project:${data.managerProjectId}`, data.managerModel);
+                } else if (data.managerUpstreamKeyId) {
                     setSelectedSource(`key:${data.managerUpstreamKeyId}`);
-                    loadModelsForProvider(data.managerUpstreamKeyId, data.managerModel);
+                    loadModelsForProvider(`key:${data.managerUpstreamKeyId}`, data.managerModel);
                 } else if (data.managerProjectId) {
-                    const match = (providersData || []).find((k: any) => k.project_id === data.managerProjectId);
-                    if (match) {
-                        setSelectedSource(`key:${match.id}`);
-                        loadModelsForProvider(match.id, data.managerModel);
-                    } else {
-                        setSelectedSource(`project:${data.managerProjectId}`);
-                    }
+                    setSelectedSource(`project:${data.managerProjectId}`);
+                    loadModelsForProvider(`project:${data.managerProjectId}`, data.managerModel);
                 } else {
                     setSelectedSource(`manual:${data.managerProvider || 'google'}`);
+                }
+
+                if (data.fusionSlotProjects && Array.isArray(data.fusionSlotProjects)) {
+                    const normalized = data.fusionSlotProjects.map((src: string) => {
+                        if (!src) return '';
+                        if (src.startsWith('project:') || src.startsWith('key:')) return src;
+                        if ((projectsData || []).some((p: any) => p.id === src)) return `project:${src}`;
+                        return `key:${src}`;
+                    });
+                    setFusionSlotKeys(normalized);
+                    normalized.forEach((src: string) => {
+                        if (src) fetchModelsForKey(src);
+                    });
                 }
 
                 if (data.fusionDefaultModels || data.fusionDefaultJudge) {
@@ -259,16 +306,25 @@ export default function EngineSettings() {
     const handleSourceChange = (newSource: string) => {
         setSelectedSource(newSource);
 
-        if (newSource.startsWith('key:') || newSource.startsWith('project:')) {
-            let targetKey: any = null;
-            if (newSource.startsWith('key:')) {
-                const keyId = newSource.replace('key:', '');
-                targetKey = upstreamKeys.find((k: any) => k.id === keyId);
-            } else {
-                const projId = newSource.replace('project:', '');
-                targetKey = upstreamKeys.find((k: any) => k.project_id === projId);
-            }
+        if (newSource.startsWith('project:')) {
+            const projId = newSource.replace('project:', '');
+            const projKeys = upstreamKeys.filter((k: any) => k.project_id === projId);
+            const targetKey = projKeys[0];
+            const prov = targetKey?.provider || 'google';
+            const baseUrl = PROVIDER_BASE_URLS[prov] || config.managerBaseUrl || 'https://api.openai.com/v1';
 
+            setConfig(prev => ({
+                ...prev,
+                managerProvider: prov,
+                managerBaseUrl: baseUrl,
+                managerProjectId: projId,
+                managerUpstreamKeyId: '', // ROTATION: empty upstream key id triggers pool rotation
+            }));
+            setManagerKeyInput(`🔄 Rotación activa (${projKeys.length} llaves en pool)`);
+            loadModelsForProvider(newSource);
+        } else if (newSource.startsWith('key:')) {
+            const keyId = newSource.replace('key:', '');
+            const targetKey = upstreamKeys.find((k: any) => k.id === keyId);
             if (targetKey) {
                 const prov = targetKey.provider || 'google';
                 const baseUrl = PROVIDER_BASE_URLS[prov] || config.managerBaseUrl || 'https://api.openai.com/v1';
@@ -280,7 +336,7 @@ export default function EngineSettings() {
                     managerUpstreamKeyId: targetKey.id,
                 }));
                 setManagerKeyInput(targetKey.key_preview || '••••••••');
-                loadModelsForProvider(targetKey.id);
+                loadModelsForProvider(newSource);
             }
         } else if (newSource.startsWith('manual:')) {
             const prov = newSource.replace('manual:', '');
@@ -307,9 +363,9 @@ export default function EngineSettings() {
             if (typesafeKeyInput && !typesafeKeyInput.includes('••••') && !typesafeKeyInput.includes('...')) {
                 payload.typesafeApiKey = typesafeKeyInput.trim();
             }
-            if (!config.managerUpstreamKeyId && managerKeyInput && !managerKeyInput.includes('••••') && !managerKeyInput.includes('...')) {
+            if (!config.managerProjectId && !config.managerUpstreamKeyId && managerKeyInput && !managerKeyInput.includes('••••') && !managerKeyInput.includes('...') && !managerKeyInput.includes('🔄')) {
                 payload.managerApiKey = managerKeyInput.trim();
-            } else if (config.managerUpstreamKeyId) {
+            } else if (config.managerUpstreamKeyId || config.managerProjectId) {
                 payload.managerApiKey = '';
             }
 
@@ -642,27 +698,30 @@ export default function EngineSettings() {
                                 onChange={e => handleSourceChange(e.target.value)}
                                 style={{ width: '100%', padding: '0.5rem 0.75rem', fontSize: '0.85rem' }}
                             >
-                                <optgroup label={`📂 ${t('engine.source_project_optgroup')}`}>
+                                <optgroup label={`📂 ${t('engine.source_projects_pool') || 'Proyectos (Pool con Rotación Automática)'}`}>
                                     {projects.map((proj: any) => {
                                         const projKeys = upstreamKeys.filter((k: any) => k.project_id === proj.id);
                                         if (projKeys.length === 0) {
                                             return (
-                                                <option key={proj.id} value={`project:${proj.id}`}>
-                                                    {proj.name} (Sin canales activos)
+                                                <option key={`proj:${proj.id}`} value={`project:${proj.id}`}>
+                                                    📂 {proj.name} (Sin canales activos)
                                                 </option>
                                             );
                                         }
-                                        if (projKeys.length === 1) {
-                                            const k = projKeys[0];
-                                            return (
-                                                <option key={k.id} value={`key:${k.id}`}>
-                                                    {proj.name} · {k.provider.toUpperCase()} ({k.key_preview || 'Llave'})
-                                                </option>
-                                            );
-                                        }
+                                        const prov = projKeys[0]?.provider?.toUpperCase() || 'CANAL';
+                                        return (
+                                            <option key={`proj:${proj.id}`} value={`project:${proj.id}`}>
+                                                📂 {proj.name} · {prov} ({projKeys.length} {projKeys.length === 1 ? 'llave' : 'llaves con rotación'})
+                                            </option>
+                                        );
+                                    })}
+                                </optgroup>
+                                <optgroup label={`🔑 ${t('engine.source_individual_keys') || 'Llaves Individuales (Fijas sin rotación)'}`}>
+                                    {projects.map((proj: any) => {
+                                        const projKeys = upstreamKeys.filter((k: any) => k.project_id === proj.id);
                                         return projKeys.map((k: any, idx: number) => (
-                                            <option key={k.id} value={`key:${k.id}`}>
-                                                {proj.name} · {k.provider.toUpperCase()} #{idx + 1} ({k.key_preview || 'Llave'})
+                                            <option key={`key:${k.id}`} value={`key:${k.id}`}>
+                                                ↳ {proj.name} · {k.provider.toUpperCase()} #{idx + 1} ({k.key_preview || 'Llave'})
                                             </option>
                                         ));
                                     })}
@@ -909,20 +968,17 @@ export default function EngineSettings() {
                                 }
                             }}
                             defaultValue=""
-                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', maxWidth: 220 }}
+                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', maxWidth: 260 }}
                         >
-                            <option value="">-- {t('engine.source_project_optgroup') || 'Seleccionar Proyecto'} --</option>
+                            <option value="">-- {t('engine.source_projects_pool') || 'Seleccionar Proyecto (Pool)'} --</option>
                             {projects.map((proj: any) => {
                                 const projKeys = upstreamKeys.filter((k: any) => k.project_id === proj.id);
                                 if (projKeys.length === 0) return null;
+                                const prov = projKeys[0]?.provider?.toUpperCase() || 'CANAL';
                                 return (
-                                    <optgroup key={proj.id} label={`📂 ${proj.name}`}>
-                                        {projKeys.map((k: any, idx: number) => (
-                                            <option key={k.id} value={k.id}>
-                                                {proj.name} · {k.provider.toUpperCase()} {projKeys.length > 1 ? `#${idx + 1}` : ''} ({k.key_preview || 'Llave'})
-                                            </option>
-                                        ))}
-                                    </optgroup>
+                                    <option key={`apply:${proj.id}`} value={`project:${proj.id}`}>
+                                        📂 {proj.name} ({prov} · {projKeys.length} {projKeys.length === 1 ? 'llave' : 'llaves'})
+                                    </option>
                                 );
                             })}
                         </select>
@@ -1000,20 +1056,29 @@ export default function EngineSettings() {
                                             onChange={e => handleFusionSlotKeyChange(i, e.target.value)}
                                             style={{ width: '100%', padding: '0.38rem 0.5rem', fontSize: '0.78rem' }}
                                         >
-                                            <option value="">-- {t('engine.source_project_optgroup') || 'Seleccionar Proyecto'} --</option>
-                                            {projects.map((proj: any) => {
-                                                const projKeys = upstreamKeys.filter((k: any) => k.project_id === proj.id);
-                                                if (projKeys.length === 0) return null;
-                                                return (
-                                                    <optgroup key={proj.id} label={`📂 ${proj.name}`}>
-                                                        {projKeys.map((k: any, idx: number) => (
-                                                            <option key={k.id} value={k.id}>
-                                                                {proj.name} · {k.provider.toUpperCase()} {projKeys.length > 1 ? `#${idx + 1}` : ''} ({k.key_preview || 'Llave'})
-                                                            </option>
-                                                        ))}
-                                                    </optgroup>
-                                                );
-                                            })}
+                                            <option value="">-- {t('engine.source_projects_pool') || 'Seleccionar Canal / Pool'} --</option>
+                                            <optgroup label={`📂 ${t('engine.source_projects_pool') || 'Proyectos (Pool con Rotación Automática)'}`}>
+                                                {projects.map((proj: any) => {
+                                                    const projKeys = upstreamKeys.filter((k: any) => k.project_id === proj.id);
+                                                    if (projKeys.length === 0) return null;
+                                                    const prov = projKeys[0]?.provider?.toUpperCase() || 'CANAL';
+                                                    return (
+                                                        <option key={`fproj:${proj.id}`} value={`project:${proj.id}`}>
+                                                            📂 {proj.name} · {prov} ({projKeys.length} {projKeys.length === 1 ? 'llave' : 'llaves con rotación'})
+                                                        </option>
+                                                    );
+                                                })}
+                                            </optgroup>
+                                            <optgroup label={`🔑 ${t('engine.source_individual_keys') || 'Llaves Individuales (Fijas sin rotación)'}`}>
+                                                {projects.map((proj: any) => {
+                                                    const projKeys = upstreamKeys.filter((k: any) => k.project_id === proj.id);
+                                                    return projKeys.map((k: any, idx: number) => (
+                                                        <option key={`fkey:${k.id}`} value={`key:${k.id}`}>
+                                                            ↳ {proj.name} · {k.provider.toUpperCase()} #{idx + 1} ({k.key_preview || 'Llave'})
+                                                        </option>
+                                                    ));
+                                                })}
+                                            </optgroup>
                                         </select>
                                     </div>
                                 )}

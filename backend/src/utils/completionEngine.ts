@@ -169,6 +169,33 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
     // Check if the gateway key is allowed to use this model
     let allowed = allowedModels.filter((m: any) => m.model_name === requestedModel);
 
+    // Explicit slot target resolution from Virtual Consensus Fusion
+    const targetSource: string = body._targetSlotSource || '';
+    if (targetSource) {
+        delete body._targetSlotSource;
+        if (targetSource.startsWith('project:')) {
+            const projId = targetSource.replace('project:', '');
+            const { data: projKeys } = await supabase
+                .from('upstream_keys')
+                .select('id, provider')
+                .eq('project_id', projId);
+            if (projKeys && projKeys.length > 0) {
+                allowed = projKeys.map((k: any) => ({
+                    upstream_key_id: k.id,
+                    model_name: requestedModel,
+                    upstream_model_name: null,
+                }));
+            }
+        } else {
+            const keyId = targetSource.replace('key:', '');
+            allowed = [{
+                upstream_key_id: keyId,
+                model_name: requestedModel,
+                upstream_model_name: null,
+            }];
+        }
+    }
+
     // Cross-project resolution for internal calls (Virtual Consensus Fusion)
     if (allowed.length === 0 && isInternalCall) {
         // 1. Direct model lookup across all projects

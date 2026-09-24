@@ -558,22 +558,23 @@ export default function ProjectDetail() {
         if (modelNames.length === 0) return;
         const newSelections: { upstream_key_id: string; model_name: string }[] = [];
         modelNames.forEach(model_name => {
-            let matchedKeyId = '';
+            const matchingKeys: string[] = [];
             for (const am of availableModels) {
                 if (am.models?.some((m: any) => (m.id || m) === model_name)) {
-                    matchedKeyId = am.upstream_key_id;
-                    break;
+                    matchingKeys.push(am.upstream_key_id);
                 }
             }
-            if (!matchedKeyId) {
-                matchedKeyId = providers[0]?.id || '';
+            if (matchingKeys.length === 0) {
+                providers.forEach(p => matchingKeys.push(p.id));
             }
-            newSelections.push({ upstream_key_id: matchedKeyId, model_name });
+            matchingKeys.forEach(kId => {
+                newSelections.push({ upstream_key_id: kId, model_name });
+            });
         });
         try {
             await fetchApi(`/gateway-keys/${gwId}/models`, { method: 'POST', body: JSON.stringify({ models: newSelections }) });
             setGatewayKeyBulkModels(prev => ({ ...prev, [gwId]: [] }));
-            toast.success('Models added to gateway');
+            toast.success('Modelos vinculados con rotación de llaves');
             loadData();
         } catch { toast.error('Failed to add models'); }
     };
@@ -585,26 +586,30 @@ export default function ProjectDetail() {
             return;
         }
 
-        let matchedKeyId = '';
+        const matchingKeys: string[] = [];
         for (const am of availableModels) {
             if (am.models?.some((m: any) => (m.id || m) === targetModel)) {
-                matchedKeyId = am.upstream_key_id;
-                break;
+                matchingKeys.push(am.upstream_key_id);
             }
         }
-        if (!matchedKeyId) {
-            matchedKeyId = providers[0]?.id || '';
+        if (matchingKeys.length === 0) {
+            providers.forEach(p => matchingKeys.push(p.id));
         }
+
+        const newSelections = matchingKeys.map(kId => ({
+            upstream_key_id: kId,
+            model_name: targetModel
+        }));
 
         try {
             await fetchApi(`/gateway-keys/${gwId}/models`, {
                 method: 'POST',
                 body: JSON.stringify({
-                    models: [{ upstream_key_id: matchedKeyId, model_name: targetModel }]
+                    models: newSelections.length > 0 ? newSelections : [{ upstream_key_id: null, model_name: targetModel }]
                 })
             });
             setAddModelSearch(prev => ({ ...prev, [gwId]: '' }));
-            toast.success(`Modelo "${targetModel}" agregado correctamente`);
+            toast.success(`Modelo "${targetModel}" agregado para rotación en el proyecto`);
             loadData();
         } catch (err: any) {
             toast.error(err.message || 'Error al agregar modelo manual');

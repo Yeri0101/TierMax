@@ -41,6 +41,7 @@ export interface EngineConfig {
     // System 3: Virtual Consensus Fusion Configuration
     fusionDefaultModels?: string[];
     fusionDefaultJudge?: string;
+    fusionSlotProjects?: string[];
 }
 
 const DEFAULT_ENGINE_CONFIG: EngineConfig = {
@@ -59,6 +60,7 @@ const DEFAULT_ENGINE_CONFIG: EngineConfig = {
 
     fusionDefaultModels: ['deepseek-chat', 'qwen/qwen3.8-27b', 'moonshotai/kimi-k3'],
     fusionDefaultJudge: 'deepseek-chat',
+    fusionSlotProjects: ['', '', '', ''],
 };
 
 let currentConfig: EngineConfig = { ...DEFAULT_ENGINE_CONFIG };
@@ -94,6 +96,7 @@ export function isMaskedOrPreviewKey(key?: string): boolean {
     if (trimmed.includes('••••')) return true;
     if (trimmed.includes('...')) return true;
     if (trimmed.includes('…')) return true;
+    if (trimmed.includes('🔄') || trimmed.includes('Rotación')) return true;
     return false;
 }
 
@@ -118,8 +121,8 @@ export function updateEngineConfig(updates: Partial<EngineConfig>): EngineConfig
     if (cleanUpdates.managerApiKey && isMaskedOrPreviewKey(cleanUpdates.managerApiKey)) {
         delete cleanUpdates.managerApiKey;
     }
-    // If manager is linked to an upstream project key, ensure managerApiKey is empty in file
-    if (cleanUpdates.managerUpstreamKeyId) {
+    // If manager is linked to an upstream project key or project pool, ensure managerApiKey is empty in file
+    if (cleanUpdates.managerUpstreamKeyId || cleanUpdates.managerProjectId) {
         cleanUpdates.managerApiKey = '';
     }
 
@@ -297,7 +300,32 @@ export async function executeManagerLLM(
     const keyId = overrides?.upstreamKeyId || currentConfig.managerUpstreamKeyId;
     let provider = overrides?.provider || currentConfig.managerProvider || 'google';
 
-    // If an upstream key is associated with this manager, fetch real secret key if needed
+    let managerKeyRotationIndex = 0;
+    const projectId = currentConfig.managerProjectId;
+
+    // 1. If a project pool is selected (with rotation across its keys), pick a key with round-robin
+    if (!keyId && projectId && isMaskedOrPreviewKey(apiKey)) {
+        try {
+            const { data: projectKeys } = await supabase
+                .from('upstream_keys')
+                .select('id, api_key, provider')
+                .eq('project_id', projectId);
+
+            if (projectKeys && projectKeys.length > 0) {
+                const picked = projectKeys[Math.floor(Math.random() * projectKeys.length)];
+                if (picked?.api_key) {
+                    apiKey = picked.api_key;
+                }
+                if (picked?.provider && !overrides?.provider) {
+                    provider = picked.provider;
+                }
+            }
+        } catch (dbErr: any) {
+            console.warn('[EngineBridge] Could not fetch project keys for Manager LLM:', dbErr?.message || dbErr);
+        }
+    }
+
+    // 2. If a specific upstream key is pinned to this manager, fetch real secret key if needed
     if (keyId && isMaskedOrPreviewKey(apiKey)) {
         try {
             const { data: keyRow, error: keyErr } = await supabase
@@ -316,7 +344,7 @@ export async function executeManagerLLM(
         }
     }
 
-    // Fall back to currentConfig if no project key was used and a manual key exists
+    // 3. Fall back to currentConfig if no project key was used and a manual key exists
     if (!apiKey && !isMaskedOrPreviewKey(currentConfig.managerApiKey)) {
         apiKey = currentConfig.managerApiKey;
     }

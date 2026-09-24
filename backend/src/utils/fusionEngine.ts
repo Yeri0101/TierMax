@@ -185,14 +185,19 @@ export async function executeFusion(options: FusionExecuteOptions): Promise<{
     const ts = new Date().toISOString();
     console.log(`[${ts}] [Fusion] Starting Multi-Model Fusion pipeline. Panel: ${panel.join(', ')} | Judge: ${judge}`);
 
+    const engineConfig = getEngineConfig(false);
+    const slotProjects = engineConfig?.fusionSlotProjects || [];
+
     // 1. Dispatch 3 drafts in parallel
-    const draftPromises = panel.map(async (model): Promise<FusionDraft> => {
+    const draftPromises = panel.map(async (model, idx): Promise<FusionDraft> => {
         const draftStart = Date.now();
+        const slotSource = slotProjects[idx] || '';
         const draftBody = {
             ...body,
             model,
             stream: false, // Drafts are always collected in memory
             max_tokens: Math.min(body.max_tokens || 1024, 2048),
+            _targetSlotSource: slotSource,
         };
 
         const result = await executeChatCompletion({
@@ -249,14 +254,16 @@ export async function executeFusion(options: FusionExecuteOptions): Promise<{
     // 2. Dialectical Synthesis with Judge Model
     const synthesisMessages = buildDialecticalPrompt(body.messages || [], successfulDrafts);
 
+    const judgeSlotSource = slotProjects[3] || '';
     const judgeBody = {
         ...body,
         model: judge,
         messages: synthesisMessages,
         stream: !!body.stream,
+        _targetSlotSource: judgeSlotSource,
     };
 
-    console.log(`[Fusion] Dispatching dialectical synthesis to judge model: ${judge} (stream=${judgeBody.stream})`);
+    console.log(`[Fusion] Dispatching dialectical synthesis to judge model: ${judge} (stream=${judgeBody.stream}, source=${judgeSlotSource || 'default'})`);
 
     const judgeResult = await executeChatCompletion({
         body: judgeBody,
