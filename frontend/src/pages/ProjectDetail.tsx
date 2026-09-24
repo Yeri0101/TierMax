@@ -4,9 +4,12 @@ import { fetchApi } from '../api';
 import {
     KeyRound, Server, ChevronLeft, Trash2, Plus, RefreshCw,
     Activity, Pause, Play, Zap, Shield, Download, AlertTriangle,
-    CheckCircle2, XCircle, Clock, Cpu, Sliders, Edit2, Save, X, DollarSign, ChevronDown
+    CheckCircle2, XCircle, Clock, Cpu, Sliders, Edit2, Save, X, DollarSign, ChevronDown,
+    Wrench, History, ArrowRight
 } from 'lucide-react';
 import { useLanguage } from '../i18n';
+import { useToast } from '../ToastContext';
+import { ProviderIcon, PromptAnchorGlyph, RateGuardianGlyph, DualEngineGlyph, RouterCascadeGlyph } from '../components/Icons';
 
 type BillingType = 'paid' | 'free';
 type UpstreamKey = { id: string; provider: string; created_at: string; key_preview?: string; billing_type?: BillingType; max_context_tokens?: number | null; max_output_tokens?: number | null };
@@ -63,8 +66,10 @@ const PROVIDER_STYLES: Record<string, { cls: string; abbr: string }> = {
 function ProviderChip({ provider }: { provider: string }) {
     const cfg = PROVIDER_STYLES[provider] ?? { cls: 'provider-default', abbr: provider.slice(0, 2).toUpperCase() };
     return (
-        <div className="provider-chip">
-            <div className={`provider-icon ${cfg.cls}`}>{cfg.abbr}</div>
+        <div className="provider-chip" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem' }}>
+            <div className={`provider-icon ${cfg.cls}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <ProviderIcon provider={provider} size={14} />
+            </div>
             <span style={{ textTransform: 'capitalize' }}>{provider}</span>
         </div>
     );
@@ -109,14 +114,20 @@ function CtxPill({ value, onClick }: { value: number | null | undefined; onClick
 
 export default function ProjectDetail() {
     const { t } = useLanguage();
+    const toast = useToast();
     const { id } = useParams();
-    const [activeTab, setActiveTab] = useState<'providers' | 'gateway' | 'analytics'>('providers');
+    const [activeTab, setActiveTab] = useState<'providers' | 'gateway' | 'analytics' | 'healing'>('providers');
     const [project, setProject] = useState<any>(null);
     const [providers, setProviders] = useState<UpstreamKey[]>([]);
     const [providerHealth, setProviderHealth] = useState<Record<string, any>>({});
     const [gateways, setGateways] = useState<GatewayKey[]>([]);
     const [analyticsData, setAnalyticsData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+
+    const [projectHistory, setProjectHistory] = useState<any[]>([]);
+    const [loadingHistory, setLoadingHistory] = useState(false);
+    const [repairing, setRepairing] = useState(false);
+    const [repairReport, setRepairReport] = useState<any | null>(null);
 
     const [newProvider, setNewProvider] = useState<{ provider: string; api_key: string; billing_type: BillingType }>({ provider: 'groq', api_key: '', billing_type: 'paid' });
     const [newGateway, setNewGateway] = useState({ key_name: '', custom_key: '' });
@@ -153,7 +164,18 @@ export default function ProjectDetail() {
     const [tokenLimitModal, setTokenLimitModal] = useState<{ mode: 'global' | 'single'; providerId?: string; providerName?: string } | null>(null);
     const [tokenLimitInput, setTokenLimitInput] = useState<string>('');
     const [providerEdit, setProviderEdit] = useState<Record<string, { api_key: string; billing_type: BillingType } | null>>({});
+    const [rateLimitModal, setRateLimitModal] = useState<{
+        providerId: string;
+        providerName: string;
+        billingType: string;
+        rpm: number;
+        tpm: number;
+        rpd: number;
+        tpd: number;
+    } | null>(null);
+    const [guardianStates, setGuardianStates] = useState<Record<string, any>>({});
     const [billingMenuOpen, setBillingMenuOpen] = useState(false);
+    const [modesModalOpen, setModesModalOpen] = useState(false);
 
     /* ─── Data loading ─── */
     const loadData = async () => {
@@ -172,8 +194,14 @@ export default function ProjectDetail() {
 
             try {
                 const healthData = await fetchApi('/providers/health');
-                setProviderHealth(healthData);
+                setProviderHealth(healthData.providers || healthData);
+                if (healthData.guardian) setGuardianStates(healthData.guardian);
             } catch (e) { console.error('Health fetch error:', e); }
+
+            try {
+                const guardianRes = await fetchApi('/engine/guardian/states');
+                if (guardianRes) setGuardianStates(guardianRes);
+            } catch { }
 
             const modelsData = [];
             for (const p of projProv) {
@@ -196,6 +224,11 @@ export default function ProjectDetail() {
                 setPricingEntries(await fetchApi('/pricing'));
             } catch { /* skip */ }
 
+            try {
+                const historyRes = await fetchApi(`/projects/${id}/history`);
+                setProjectHistory(historyRes?.events || []);
+            } catch { /* skip */ }
+
             setBudgetInput(currentProj?.budget_usd != null ? String(currentProj.budget_usd) : '');
             setBudgetAlertThresholdInput(currentProj?.budget_alert_threshold_pct != null ? String(currentProj.budget_alert_threshold_pct) : '80');
 
@@ -203,6 +236,38 @@ export default function ProjectDetail() {
             console.error(err);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const loadProjectHistory = async () => {
+        if (!id) return;
+        setLoadingHistory(true);
+        try {
+            const res = await fetchApi(`/projects/${id}/history`);
+            setProjectHistory(res?.events || []);
+        } catch (err: any) {
+            console.warn('[OpenClaw] Failed to fetch project history:', err?.message || err);
+        } finally {
+            setLoadingHistory(false);
+        }
+    };
+
+    const handleRunRepair = async () => {
+        if (!id || repairing) return;
+        setRepairing(true);
+        try {
+            const res = await fetchApi(`/projects/${id}/repair`, { method: 'POST' });
+            if (res?.ok && res.report) {
+                setRepairReport(res.report);
+                toast.success(t('healing.title') + ' — ' + (t('healing.remediation_title') || 'Diagnóstico completado'));
+                loadProjectHistory();
+            } else {
+                toast.error(res?.error || 'Falló el diagnóstico');
+            }
+        } catch (err: any) {
+            toast.error(err?.message || 'Error al ejecutar diagnóstico de auto-reparación');
+        } finally {
+            setRepairing(false);
         }
     };
 
@@ -229,8 +294,9 @@ export default function ProjectDetail() {
         try {
             await fetchApi('/providers', { method: 'POST', body: JSON.stringify({ project_id: id, ...newProvider }) });
             setNewProvider({ ...newProvider, api_key: '' });
+            toast.success(t('project.provider_added') || 'Provider added successfully');
             loadData();
-        } catch (err: any) { alert(err.message || 'Failed to add provider'); }
+        } catch (err: any) { toast.error(err.message || 'Failed to add provider'); }
     };
 
     const handleStartProviderEdit = (provider: UpstreamKey) => {
@@ -260,9 +326,10 @@ export default function ProjectDetail() {
                 body: JSON.stringify(payload),
             });
             setProviderEdit(prev => ({ ...prev, [providerId]: null }));
+            toast.success('Provider updated');
             loadData();
         } catch (err: any) {
-            alert(err.message || 'Failed to update provider');
+            toast.error(err.message || 'Failed to update provider');
         }
     };
 
@@ -276,23 +343,28 @@ export default function ProjectDetail() {
             setProviders(prev => prev.map(p => ({ ...p, billing_type: billingType })));
             setProviderEdit({});
             setBillingMenuOpen(false);
+            toast.success(`Updated all providers to ${billingType.toUpperCase()}`);
             loadRealtimeData();
         } catch (err: any) {
-            alert(err.message || 'Failed to update provider billing types');
+            toast.error(err.message || 'Failed to update provider billing types');
         }
     };
 
     const handleDeleteProvider = async (provId: string) => {
         if (!confirm('Delete this provider key?')) return;
-        try { await fetchApi(`/providers/${provId}`, { method: 'DELETE' }); loadData(); }
-        catch { alert('Failed to delete'); }
+        try { 
+            await fetchApi(`/providers/${provId}`, { method: 'DELETE' }); 
+            toast.success('Provider deleted');
+            loadData(); 
+        }
+        catch { toast.error('Failed to delete provider'); }
     };
 
     const handleSaveContextLimit = async (provId: string) => {
         const raw = ctxLimitEdit[provId];
         const value = raw === '' || raw === null ? null : Number(raw);
         if (value !== null && (isNaN(value) || value < 100)) {
-            alert('Enter a number ≥ 100, or leave blank to remove the limit');
+            toast.warning('Enter a number ≥ 100, or leave blank to remove the limit');
             return;
         }
         try {
@@ -302,95 +374,107 @@ export default function ProjectDetail() {
             });
             setProviders(prev => prev.map(p => p.id === provId ? { ...p, max_context_tokens: value } : p));
             setCtxLimitEdit(prev => ({ ...prev, [provId]: null }));
-        } catch { alert('Failed to save context limit'); }
+            toast.success('Context limit saved');
+        } catch { toast.error('Failed to save context limit'); }
     };
 
     const handleResetAllProviders = async () => {
-        try { await fetchApi('/providers/reset-all', { method: 'POST' }); loadData(); }
-        catch { alert('Failed to reset all providers'); }
+        try { 
+            await fetchApi('/providers/reset-all', { method: 'POST' }); 
+            toast.success('All providers reset');
+            loadData(); 
+        }
+        catch { toast.error('Failed to reset all providers'); }
+    };
+
+    const handlePingSingleKey = async (keyId: string) => {
+        setTestProviderResults(prev => ({ ...prev, [keyId]: { success: false, msg: 'Testing…', testing: true } }));
+        try {
+            const res = await fetchApi(`/channels/test/${keyId}`, { method: 'POST' });
+            setTestProviderResults(prev => ({
+                ...prev,
+                [keyId]: {
+                    success: res.ok,
+                    msg: res.ok ? `⚡ ${res.latencyMs}ms` : `❌ ${res.error || 'Failed'}`,
+                    testing: false,
+                }
+            }));
+        } catch (err: any) {
+            setTestProviderResults(prev => ({
+                ...prev,
+                [keyId]: { success: false, msg: `❌ ${err.message || 'Error'}`, testing: false }
+            }));
+        }
     };
 
     const handlePingAllProviders = async () => {
         setIsTestingAll(true);
-        setTestProviderResults({});  // Clear previous results
-        const words = ["sol", "luna", "viento", "fuego", "nube", "rio", "bosque", "cielo", "nieve", "roca", "mar", "estrella"];
-
-        // Collect all allowed models across every gateway key, annotated with their upstream_key_id
-        const allAllowedModels: { model_name: string; upstream_key_id?: string }[] = gateways.flatMap(
-            g => g.gateway_key_models || []
-        );
-
-        const promises = providers.map(async (p, idx) => {
-            setTestProviderResults(prev => ({ ...prev, [p.id]: { success: false, msg: '', testing: true } }));
-            const randomWord = words[Math.floor(Math.random() * words.length)] + idx * 7;
-
-            // Try to find a model that belongs directly to this upstream provider
-            let matchingModel = allAllowedModels.find(m => m.upstream_key_id === p.id)?.model_name;
-            
-            // If none directly assigned, find a model assigned to ANY other upstream key of the same provider type
-            if (!matchingModel) {
-                const siblingKeyIds = providers.filter(prov => prov.provider === p.provider).map(prov => prov.id);
-                matchingModel = allAllowedModels.find(m => m.upstream_key_id && siblingKeyIds.includes(m.upstream_key_id))?.model_name;
-            }
-
-            // 30-second timeout per provider test
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 30000);
-
-            try {
-                const token = localStorage.getItem('token');
-                const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
-                const res = await fetch(`${API_URL}/providers/${p.id}/test`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-                    },
-                    body: JSON.stringify({
-                        prompt: `Responde unicamente con la palabra: ${randomWord}`,
-                        ...(matchingModel ? { model: matchingModel } : {})
-                    }),
-                    signal: controller.signal,
-                });
-
-                clearTimeout(timeoutId);
-                const data = await res.json().catch(() => null);
-
-                if (res.ok && (data?.status === 200 || data?.status === '200')) {
-                    setTestProviderResults(prev => ({
-                        ...prev,
-                        [p.id]: { success: true, msg: '✓ OK (200)', testing: false }
-                    }));
-                } else {
-                    let errMsg = `Error ${data?.status || res.status}`;
-                    const errData = data?.error;
-                    if (errData) {
-                        if (typeof errData === 'string') errMsg = errData;
-                        else if (errData.message) errMsg = errData.message;
-                        else if (errData.error?.message) errMsg = errData.error.message;
-                        else errMsg = `Error ${data?.status || res.status}`;
-                    }
-                    setTestProviderResults(prev => ({
-                        ...prev,
-                        [p.id]: { success: false, msg: errMsg, testing: false }
-                    }));
-                }
-            } catch (err: any) {
-                clearTimeout(timeoutId);
-                const isTimeout = err.name === 'AbortError';
-                setTestProviderResults(prev => ({
-                    ...prev,
-                    [p.id]: { success: false, msg: isTimeout ? '⏱ Timeout (30s)' : (err.message || 'Error'), testing: false }
-                }));
-            }
+        providers.forEach(p => {
+            setTestProviderResults(prev => ({ ...prev, [p.id]: { success: false, msg: 'Testing…', testing: true } }));
         });
-        await Promise.all(promises);
-        setIsTestingAll(false);
+        try {
+            const data = await fetchApi(`/channels/test-project/${id}`, { method: 'POST' });
+            if (data?.results && Array.isArray(data.results)) {
+                const map: Record<string, any> = {};
+                data.results.forEach((r: any) => {
+                    map[r.upstreamKeyId] = {
+                        success: r.ok,
+                        msg: r.ok ? `⚡ ${r.latencyMs}ms` : `❌ ${r.error || 'Failed'}`,
+                        testing: false,
+                    };
+                });
+                setTestProviderResults(prev => ({ ...prev, ...map }));
+            }
+        } catch (err: any) {
+            console.error('Test all channels error:', err);
+        } finally {
+            setIsTestingAll(false);
+        }
+    };
+
+    const openRateLimitModal = (p: UpstreamKey) => {
+        const guardian = guardianStates[p.id];
+        setRateLimitModal({
+            providerId: p.id,
+            providerName: p.provider,
+            billingType: p.billing_type || 'free',
+            rpm: guardian?.rpm?.limit ?? 15,
+            tpm: guardian?.tpm?.limit ?? 1000000,
+            rpd: guardian?.daily?.rpdLimit ?? 1500,
+            tpd: guardian?.daily?.tpdLimit ?? 10000000,
+        });
+    };
+
+    const handleSaveRateLimits = async () => {
+        if (!rateLimitModal) return;
+        try {
+            await fetchApi('/engine/guardian/limits', {
+                method: 'POST',
+                body: JSON.stringify({
+                    upstreamKeyId: rateLimitModal.providerId,
+                    provider: rateLimitModal.providerName,
+                    billing_type: rateLimitModal.billingType,
+                    rpm: Number(rateLimitModal.rpm),
+                    tpm: Number(rateLimitModal.tpm),
+                    rpd: Number(rateLimitModal.rpd),
+                    tpd: Number(rateLimitModal.tpd),
+                }),
+            });
+            toast.success(t('project.limits_saved') || 'Rate limits updated successfully');
+            setRateLimitModal(null);
+            loadData();
+        } catch (err: any) {
+            toast.error(err.message || 'Failed to update rate limits');
+        }
     };
 
     const handlePauseAllProjectProviders = async () => {
-        try { await fetchApi(`/projects/${id}/pause-all`, { method: 'POST' }); loadData(); }
-        catch { alert('Failed to pause project providers'); }
+        try { 
+            await fetchApi(`/projects/${id}/pause-all`, { method: 'POST' }); 
+            toast.info('All project providers paused');
+            loadData(); 
+        }
+        catch { toast.error('Failed to pause project providers'); }
     };
 
     const openTokenLimitModal = (mode: 'global' | 'single', providerId?: string, providerName?: string) => {
@@ -405,7 +489,7 @@ export default function ProjectDetail() {
         if (!tokenLimitModal) return;
         const value = tokenLimitInput.trim() === '' ? null : Number(tokenLimitInput);
         if (value !== null && (isNaN(value) || value < 100)) {
-            alert('Enter a number ≥ 100, or leave blank to remove the limit (uses gateway default)');
+            toast.warning('Enter a number ≥ 100, or leave blank to remove the limit (uses gateway default)');
             return;
         }
         try {
@@ -420,19 +504,28 @@ export default function ProjectDetail() {
                     body: JSON.stringify({ max_output_tokens: value }),
                 });
             }
+            toast.success('Token limit saved');
             setTokenLimitModal(null);
             loadData();
-        } catch { alert('Failed to save token limit'); }
+        } catch { toast.error('Failed to save token limit'); }
     };
 
     const handleResetProvider = async (provId: string) => {
-        try { await fetchApi(`/providers/${provId}/reset`, { method: 'POST' }); loadData(); }
-        catch { alert('Failed to reset provider'); }
+        try { 
+            await fetchApi(`/providers/${provId}/reset`, { method: 'POST' }); 
+            toast.success('Provider reset');
+            loadData(); 
+        }
+        catch { toast.error('Failed to reset provider'); }
     };
 
     const handlePauseProvider = async (provId: string) => {
-        try { await fetchApi(`/providers/${provId}/pause`, { method: 'POST' }); loadData(); }
-        catch { alert('Failed to pause provider'); }
+        try { 
+            await fetchApi(`/providers/${provId}/pause`, { method: 'POST' }); 
+            toast.info('Provider state toggled');
+            loadData(); 
+        }
+        catch { toast.error('Failed to pause provider'); }
     };
 
     const handleCreateGateway = async (e: React.FormEvent) => {
@@ -445,14 +538,19 @@ export default function ProjectDetail() {
             });
             setNewGateway({ key_name: '', custom_key: '' });
             setSelectedModels([]);
+            toast.success('Gateway key created');
             loadData();
-        } catch (err: any) { alert(err.message || 'Failed to create gateway key'); }
+        } catch (err: any) { toast.error(err.message || 'Failed to create gateway key'); }
     };
 
     const handleDeleteGateway = async (gwId: string) => {
         if (!confirm('Delete this gateway key?')) return;
-        try { await fetchApi(`/gateway-keys/${gwId}`, { method: 'DELETE' }); loadData(); }
-        catch { alert('Failed to delete'); }
+        try { 
+            await fetchApi(`/gateway-keys/${gwId}`, { method: 'DELETE' }); 
+            toast.success('Gateway key deleted');
+            loadData(); 
+        }
+        catch { toast.error('Failed to delete gateway key'); }
     };
 
     const handleAddModelsToGateway = async (gwId: string) => {
@@ -469,14 +567,19 @@ export default function ProjectDetail() {
         try {
             await fetchApi(`/gateway-keys/${gwId}/models`, { method: 'POST', body: JSON.stringify({ models: newSelections }) });
             setGatewayKeyBulkModels(prev => ({ ...prev, [gwId]: [] }));
+            toast.success('Models added to gateway');
             loadData();
-        } catch { alert('Failed to add models'); }
+        } catch { toast.error('Failed to add models'); }
     };
 
     const handleDeleteModelFromGateway = async (gwId: string, modelName: string) => {
         if (!confirm(`Remove ${modelName}?`)) return;
-        try { await fetchApi(`/gateway-keys/${gwId}/models/${encodeURIComponent(modelName)}`, { method: 'DELETE' }); loadData(); }
-        catch { alert('Failed to delete model'); }
+        try { 
+            await fetchApi(`/gateway-keys/${gwId}/models/${encodeURIComponent(modelName)}`, { method: 'DELETE' }); 
+            toast.success(`Removed ${modelName}`);
+            loadData(); 
+        }
+        catch { toast.error('Failed to delete model'); }
     };
 
     // Helpers to classify model type
@@ -501,7 +604,7 @@ export default function ProjectDetail() {
             setAudioChunks(prev => ({ ...prev, [gwId]: chunks }));
             setAudioRecording(prev => ({ ...prev, [gwId]: true }));
         } catch {
-            alert('No se pudo acceder al micrófono. Verifica los permisos del navegador.');
+            toast.error('No se pudo acceder al micrófono. Verifica los permisos del navegador.');
         }
     };
 
@@ -513,7 +616,7 @@ export default function ProjectDetail() {
     // ── Main test handler ───────────────────────────────────────────────
     const handleTestKey = async (gatewayKey: GatewayKey) => {
         const model = testModels[gatewayKey.id] || gatewayKey.gateway_key_models?.[0]?.model_name;
-        if (!model) { alert('Selecciona un modelo primero.'); return; }
+        if (!model) { toast.warning('Selecciona un modelo primero.'); return; }
         const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:3000' : window.location.origin;
 
         setTestLoading(prev => ({ ...prev, [gatewayKey.id]: true }));
@@ -524,7 +627,7 @@ export default function ProjectDetail() {
             if (isSttModel(model)) {
                 const audioFile = audioFiles[gatewayKey.id];
                 if (!audioFile) {
-                    alert('Graba o sube un archivo de audio primero.');
+                    toast.warning('Graba o sube un archivo de audio primero.');
                     setTestLoading(prev => ({ ...prev, [gatewayKey.id]: false }));
                     return;
                 }
@@ -542,7 +645,7 @@ export default function ProjectDetail() {
             // ── TTS: text-to-speech ─────────────────────────────────────
             } else if (isTtsModel(model)) {
                 const input = testPrompts[gatewayKey.id];
-                if (!input) { alert('Escribe el texto a convertir en voz.'); setTestLoading(prev => ({ ...prev, [gatewayKey.id]: false })); return; }
+                if (!input) { toast.warning('Escribe el texto a convertir en voz.'); setTestLoading(prev => ({ ...prev, [gatewayKey.id]: false })); return; }
                 const voice = ttsVoice[gatewayKey.id] || 'alloy';
                 const res = await fetch(`${baseUrl}/v1/audio/speech`, {
                     method: 'POST',
@@ -561,7 +664,7 @@ export default function ProjectDetail() {
             // ── Chat completions ────────────────────────────────────────
             } else {
                 const prompt = testPrompts[gatewayKey.id];
-                if (!prompt) { alert('Escribe un mensaje de prueba.'); setTestLoading(prev => ({ ...prev, [gatewayKey.id]: false })); return; }
+                if (!prompt) { toast.warning('Escribe un mensaje de prueba.'); setTestLoading(prev => ({ ...prev, [gatewayKey.id]: false })); return; }
                 const res = await fetch(`${baseUrl}/v1/chat/completions`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${gatewayKey.api_key}` },
@@ -636,8 +739,10 @@ export default function ProjectDetail() {
                         </span>
                         {meta && cfg && (
                             <>
-                                <div className="provider-chip" style={{ fontSize: '0.7rem' }}>
-                                    <div className={`provider-icon ${cfg.cls}`} style={{ width: 18, height: 18, fontSize: '0.55rem' }}>{cfg.abbr}</div>
+                                <div className="provider-chip" style={{ fontSize: '0.7rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                                    <div className={`provider-icon ${cfg.cls}`} style={{ width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <ProviderIcon provider={meta.provider} size={12} />
+                                    </div>
                                     <span style={{ textTransform: 'capitalize' }}>{meta.provider}</span>
                                 </div>
                                 {meta.upstream_key_id && (
@@ -702,8 +807,12 @@ export default function ProjectDetail() {
 
     const handleClearAnalytics = async () => {
         if (!confirm('Clear all analytics data for this project?')) return;
-        try { await fetchApi(`/analytics/${id}`, { method: 'DELETE' }); loadData(); }
-        catch { alert('Failed to clear analytics'); }
+        try { 
+            await fetchApi(`/analytics/${id}`, { method: 'DELETE' }); 
+            toast.success('Analytics cleared');
+            loadData(); 
+        }
+        catch { toast.error('Failed to clear analytics'); }
     };
 
     const handleExportAnalytics = () => {
@@ -727,11 +836,11 @@ export default function ProjectDetail() {
             const budget = budgetInput.trim() === '' ? null : Number(budgetInput);
             const threshold = budgetAlertThresholdInput.trim() === '' ? 80 : Number(budgetAlertThresholdInput);
             if (budget !== null && (isNaN(budget) || budget < 0)) {
-                alert('Budget must be a number >= 0');
+                toast.warning('Budget must be a number >= 0');
                 return;
             }
             if (isNaN(threshold) || threshold < 1 || threshold > 100) {
-                alert('Alert threshold must be between 1 and 100');
+                toast.warning('Alert threshold must be between 1 and 100');
                 return;
             }
             const updated = await fetchApi(`/projects/${id}`, {
@@ -741,8 +850,9 @@ export default function ProjectDetail() {
             setProject(updated);
             setBudgetInput(updated?.budget_usd != null ? String(updated.budget_usd) : '');
             setBudgetAlertThresholdInput(updated?.budget_alert_threshold_pct != null ? String(updated.budget_alert_threshold_pct) : '80');
+            toast.success('Budget settings saved');
         } catch (err: any) {
-            alert(err.message || 'Failed to save budget');
+            toast.error(err.message || 'Failed to save budget');
         }
     };
 
@@ -778,8 +888,9 @@ export default function ProjectDetail() {
 
             setPricingEntries(await fetchApi('/pricing'));
             setPricingForm({ id: '', provider: '*', model_name: '', input_price_per_1m: '', output_price_per_1m: '' });
+            toast.success('Pricing rule saved');
         } catch (err: any) {
-            alert(err.message || 'Failed to save pricing');
+            toast.error(err.message || 'Failed to save pricing');
         }
     };
 
@@ -801,8 +912,9 @@ export default function ProjectDetail() {
             if (pricingForm.id === entryId) {
                 setPricingForm({ id: '', provider: '*', model_name: '', input_price_per_1m: '', output_price_per_1m: '' });
             }
+            toast.success('Pricing rule deleted');
         } catch (err: any) {
-            alert(err.message || 'Failed to delete pricing');
+            toast.error(err.message || 'Failed to delete pricing');
         }
     };
 
@@ -813,8 +925,9 @@ export default function ProjectDetail() {
             const result = await fetchApi('/pricing/sync-litellm', { method: 'POST' });
             setPricingEntries(await fetchApi('/pricing'));
             setPricingSyncSummary(`Synced ${result.synced} LiteLLM prices. Skipped ${result.skipped_manual_overrides} manual overrides.`);
+            toast.success(`Synced ${result.synced} prices from LiteLLM`);
         } catch (err: any) {
-            alert(err.message || 'Failed to sync LiteLLM pricing');
+            toast.error(err.message || 'Failed to sync LiteLLM pricing');
         } finally {
             setPricingSyncing(false);
         }
@@ -852,10 +965,16 @@ export default function ProjectDetail() {
     /* ─── Main render ─── */
     return (
         <div style={{ animation: 'fadeIn 0.3s ease-out' }}>
-            {/* Back */}
-            <Link to="/" className="back-link">
-                <ChevronLeft size={16} /> {t('project.back')}
-            </Link>
+            {/* Breadcrumbs */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '1.25rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                <Link to="/" style={{ color: 'var(--text-muted)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                    <ChevronLeft size={14} /> {t('nav.projects')}
+                </Link>
+                <span style={{ opacity: 0.5 }}>/</span>
+                <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{project.name}</span>
+                <span style={{ opacity: 0.5 }}>/</span>
+                <span style={{ color: 'var(--brand-orange)', fontWeight: 600, textTransform: 'capitalize' }}>{activeTab}</span>
+            </div>
 
             {/* Project Header */}
             <div className="flex items-center gap-3" style={{ marginBottom: '1.75rem' }}>
@@ -868,20 +987,55 @@ export default function ProjectDetail() {
                     <Server size={22} style={{ color: projColor }} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                    <h1 style={{ margin: 0, fontSize: '1.45rem', fontWeight: 800, color: '#ffffff', letterSpacing: '-0.02em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>
+                    <h1 style={{ margin: 0, fontSize: '1.45rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {project.name}
                     </h1>
                     <code style={{ fontSize: '0.7rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>{project.id}</code>
                 </div>
-                <span style={{
-                    display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
-                    background: 'rgba(255,107,43,0.1)', border: '1px solid rgba(255,107,43,0.25)',
-                    borderRadius: 'var(--radius-pill)', padding: '0.3rem 0.75rem',
-                    fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.08em',
-                    color: 'var(--brand-orange)', textTransform: 'uppercase', flexShrink: 0,
-                }}>
-                    <Shield size={10} /> SOAT Active
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', flexShrink: 0 }}>
+                    <button
+                        onClick={() => setModesModalOpen(true)}
+                        title="Click to view all Gateway Operating Modes (SOAT, Guardian, Dual Engine, Atlas)"
+                        style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
+                            background: 'rgba(255,107,43,0.12)', border: '1px solid rgba(255,107,43,0.3)',
+                            borderRadius: 'var(--radius-pill)', padding: '0.28rem 0.65rem',
+                            fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.06em',
+                            color: 'var(--brand-orange)', textTransform: 'uppercase', cursor: 'pointer',
+                            transition: 'all var(--transition-fast)',
+                        }}
+                    >
+                        <PromptAnchorGlyph size={12} color="var(--brand-orange)" /> {t('modes.badge_soat')}
+                    </button>
+                    <button
+                        onClick={() => setModesModalOpen(true)}
+                        title="Click to view Guardian Anti-429 & Free Tier settings"
+                        style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
+                            background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)',
+                            borderRadius: 'var(--radius-pill)', padding: '0.28rem 0.65rem',
+                            fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.06em',
+                            color: '#10b981', textTransform: 'uppercase', cursor: 'pointer',
+                            transition: 'all var(--transition-fast)',
+                        }}
+                    >
+                        <RateGuardianGlyph size={12} color="#10b981" /> {t('modes.badge_guardian')}
+                    </button>
+                    <button
+                        onClick={() => setModesModalOpen(true)}
+                        title="Click to view Dual Engine (TypeSafe Jev + LLM) status"
+                        style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
+                            background: 'rgba(168,85,247,0.12)', border: '1px solid rgba(168,85,247,0.3)',
+                            borderRadius: 'var(--radius-pill)', padding: '0.28rem 0.65rem',
+                            fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.06em',
+                            color: '#a855f7', textTransform: 'uppercase', cursor: 'pointer',
+                            transition: 'all var(--transition-fast)',
+                        }}
+                    >
+                        <DualEngineGlyph size={12} color="#a855f7" /> {t('modes.badge_engine')}
+                    </button>
+                </div>
             </div>
 
             {/* Tabs */}
@@ -894,6 +1048,9 @@ export default function ProjectDetail() {
                 </button>
                 <button id="tab-analytics" className={`tab-btn ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => setActiveTab('analytics')}>
                     <Activity size={14} /> {t('project.tab_analytics')}
+                </button>
+                <button id="tab-healing" className={`tab-btn ${activeTab === 'healing' ? 'active' : ''}`} onClick={() => { setActiveTab('healing'); loadProjectHistory(); }}>
+                    <Wrench size={14} /> {t('project.tab_healing')}
                 </button>
             </div>
 
@@ -985,16 +1142,16 @@ export default function ProjectDetail() {
                                         )}
                                     </div>
                                     <button onClick={handlePauseAllProjectProviders} className="btn btn-warning btn-sm">
-                                        <Pause size={13} /> Pause All
+                                        <Pause size={13} /> {t('project.pause_all') || 'Pause All'}
                                     </button>
                                     <button onClick={handleResetAllProviders} className="btn btn-success btn-sm">
-                                        <RefreshCw size={13} /> Reset All
+                                        <RefreshCw size={13} /> {t('project.reset_all') || 'Reset All'}
                                     </button>
                                     <button onClick={() => openTokenLimitModal('global')} className="btn btn-sm" style={{ background: 'rgba(139,92,246,0.15)', border: '1px solid rgba(139,92,246,0.35)', color: '#a78bfa' }}>
-                                        <Sliders size={13} /> Token Limit
+                                        <Sliders size={13} /> {t('project.token_limit') || 'Token Limit'}
                                     </button>
                                     <button onClick={handlePingAllProviders} className="btn btn-primary btn-sm" disabled={isTestingAll}>
-                                        {isTestingAll ? <span className="spinner-ring" style={{ width: 13, height: 13, borderWidth: 2 }} /> : <Zap size={13} />} Test All
+                                        {isTestingAll ? <span className="spinner-ring" style={{ width: 13, height: 13, borderWidth: 2 }} /> : <Zap size={13} />} {t('project.test_all') || 'Test All'}
                                     </button>
                                     <button onClick={loadData} className="btn btn-secondary btn-icon btn-sm" title="Refresh">
                                         <RefreshCw size={14} />
@@ -1084,10 +1241,34 @@ export default function ProjectDetail() {
                                                             )}
                                                         </td>
                                                         <td>
-                                                            <div style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', lineHeight: 1.7 }}>
-                                                                <div><span style={{ color: 'var(--text-muted)' }}>rpm </span><span style={{ color: 'var(--text-secondary)' }}>{health.requestsPerMinute}</span><span style={{ color: 'var(--text-muted)' }}> / {health.requestsPerDay}d</span></div>
-                                                                <div><span style={{ color: 'var(--text-muted)' }}>tok </span><span style={{ color: 'var(--text-secondary)' }}>{health.tokensPerMinute}</span><span style={{ color: 'var(--text-muted)' }}> / {health.tokensPerDay}d</span></div>
-                                                            </div>
+                                                            {(() => {
+                                                                const guardian = guardianStates[p.id];
+                                                                const currentRpm = guardian?.rpm?.current ?? health.requestsPerMinute ?? 0;
+                                                                const limitRpm = guardian?.rpm?.limit ?? (p.billing_type === 'free' ? 15 : 300);
+                                                                const rpmPercent = Math.min(100, Math.round((currentRpm / Math.max(1, limitRpm)) * 100));
+                                                                const color = rpmPercent > 85 ? '#ef4444' : rpmPercent > 65 ? '#f59e0b' : '#22c55e';
+
+                                                                return (
+                                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', minWidth: 125 }}>
+                                                                        <div className="flex items-center justify-between" style={{ fontSize: '0.72rem', fontFamily: 'var(--font-mono)' }}>
+                                                                            <span style={{ color: 'var(--text-muted)' }}>RPM</span>
+                                                                            <span style={{ fontWeight: 700, color }}>{currentRpm} / {limitRpm}</span>
+                                                                        </div>
+                                                                        <div style={{ width: '100%', height: 4, borderRadius: 2, background: 'var(--surface-2)', overflow: 'hidden' }}>
+                                                                            <div style={{ width: `${Math.max(4, rpmPercent)}%`, height: '100%', background: color, transition: 'width 0.3s' }} />
+                                                                        </div>
+                                                                        <div className="flex items-center justify-between" style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                                                                            <span>{health.requestsPerDay || 0} req/d</span>
+                                                                            <button
+                                                                                onClick={() => openRateLimitModal(p)}
+                                                                                style={{ background: 'none', border: 'none', color: 'var(--brand-orange)', cursor: 'pointer', padding: 0, textDecoration: 'underline', fontSize: '0.68rem', fontWeight: 600 }}
+                                                                            >
+                                                                                Limits ✎
+                                                                            </button>
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })()}
                                                         </td>
                                                         <td>
                                                             {isEditing ? (
@@ -1129,6 +1310,18 @@ export default function ProjectDetail() {
                                                         </td>
                                                         <td>
                                                             <div className="flex gap-2">
+                                                                <button
+                                                                    onClick={() => handlePingSingleKey(p.id)}
+                                                                    className="btn btn-secondary btn-icon btn-sm"
+                                                                    title="Ping Latency Test (1 token)"
+                                                                    disabled={testProviderResults[p.id]?.testing}
+                                                                >
+                                                                    {testProviderResults[p.id]?.testing ? (
+                                                                        <span className="spinner-ring" style={{ width: 12, height: 12, borderWidth: 1.5 }} />
+                                                                    ) : (
+                                                                        <Zap size={13} style={{ color: 'var(--brand-amber)' }} />
+                                                                    )}
+                                                                </button>
                                                                 <button onClick={() => handleStartProviderEdit(p)} className="btn btn-secondary btn-icon btn-sm" title={t('project.edit_provider')}>
                                                                     <Edit2 size={13} />
                                                                 </button>
@@ -1704,6 +1897,244 @@ export default function ProjectDetail() {
                 </div>
             )}
 
+            {/* ═══ TAB: HEALING & HEALTH ═══ */}
+            {activeTab === 'healing' && (
+                <div>
+                    {/* Header with Diagnostic Button */}
+                    <div className="flex justify-between items-center" style={{ marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+                        <div>
+                            <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                                <DualEngineGlyph size={18} color="var(--brand-orange)" />
+                                {t('healing.title')}
+                            </h2>
+                            <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                                {t('healing.subtitle')}
+                            </p>
+                        </div>
+                        <button
+                            id="btn-run-repair"
+                            className="btn btn-primary"
+                            onClick={handleRunRepair}
+                            disabled={repairing}
+                            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                        >
+                            <RefreshCw size={14} className={repairing ? 'spin' : ''} />
+                            {repairing ? t('healing.repairing') : t('healing.btn_repair')}
+                        </button>
+                    </div>
+
+                    {/* Stats Row */}
+                    {(() => {
+                        const totalUpstream = providers.length;
+                        const healthyKeysCount = repairReport?.summary?.healthyKeys ?? providers.filter(p => (providerHealth[p.id]?.status ?? 'healthy') === 'healthy').length;
+                        const degradedKeysCount = repairReport?.summary?.degradedKeys ?? Math.max(0, totalUpstream - healthyKeysCount);
+                        const totalConfiguredModelsCount = repairReport?.summary?.totalConfiguredModels ?? availableModels.reduce((acc, curr) => acc + (curr.models?.length || 0), 0);
+                        const autoHealedCount = projectHistory.filter((e: any) => e.eventType === 'auto_healed').length;
+
+                        return (
+                            <div className="stats-row" style={{ marginBottom: '1.5rem' }}>
+                                <div className="stat-card">
+                                    <div className="stat-label"><CheckCircle2 size={10} /> {t('healing.summary_healthy')}</div>
+                                    <div className="stat-value green">{healthyKeysCount} / {totalUpstream}</div>
+                                </div>
+                                <div className="stat-card">
+                                    <div className="stat-label"><AlertTriangle size={10} /> {t('healing.summary_degraded')}</div>
+                                    <div className="stat-value" style={{ color: degradedKeysCount > 0 ? '#ef4444' : 'var(--text-secondary)' }}>{degradedKeysCount}</div>
+                                </div>
+                                <div className="stat-card">
+                                    <div className="stat-label"><Cpu size={10} /> {t('healing.summary_models')}</div>
+                                    <div className="stat-value amber">{totalConfiguredModelsCount}</div>
+                                </div>
+                                <div className="stat-card">
+                                    <div className="stat-label"><Zap size={10} /> Auto-Remediations</div>
+                                    <div className="stat-value orange">{autoHealedCount}</div>
+                                </div>
+                            </div>
+                        );
+                    })()}
+
+                    {/* Diagnostic Findings & Actions (if diagnostic run) */}
+                    {repairReport && (
+                        <div className="glass-panel" style={{ marginBottom: '1.5rem' }}>
+                            <div className="section-label" style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <Shield size={12} color="#10b981" /> {t('healing.remediation_title')}
+                            </div>
+
+                            {repairReport.remediationActions && repairReport.remediationActions.length > 0 ? (
+                                <div style={{ display: 'grid', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                                    {repairReport.remediationActions.map((act: any, idx: number) => (
+                                        <div
+                                            key={idx}
+                                            style={{
+                                                padding: '0.85rem 1rem',
+                                                borderRadius: 'var(--radius-md)',
+                                                background: act.type === 'action_required' ? 'rgba(239,68,68,0.08)' : 'rgba(245,158,11,0.08)',
+                                                border: act.type === 'action_required' ? '1px solid rgba(239,68,68,0.3)' : '1px solid rgba(245,158,11,0.3)',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'space-between',
+                                                gap: '1rem',
+                                                flexWrap: 'wrap'
+                                            }}
+                                        >
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                                                <span className={`badge ${act.type === 'action_required' ? 'badge-error' : 'badge-warning'}`}>
+                                                    {act.type === 'action_required' ? 'Action Required' : 'Failover Ready'}
+                                                </span>
+                                                <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: '0.85rem' }}>
+                                                    {act.target}
+                                                </span>
+                                                <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                                                    {act.details}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div style={{
+                                    padding: '0.85rem 1.25rem',
+                                    borderRadius: 'var(--radius-md)',
+                                    background: 'rgba(16,185,129,0.08)',
+                                    border: '1px solid rgba(16,185,129,0.25)',
+                                    color: '#34d399',
+                                    fontSize: '0.85rem',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.6rem',
+                                    marginBottom: '1.25rem'
+                                }}>
+                                    <CheckCircle2 size={16} />
+                                    <span>{t('healing.healthy_all')}</span>
+                                </div>
+                            )}
+
+                            {/* Channel Health Probes Table */}
+                            {repairReport.channelHealth && repairReport.channelHealth.length > 0 && (
+                                <div className="table-wrapper">
+                                    <table className="data-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Provider</th>
+                                                <th>Tested Model</th>
+                                                <th>Status</th>
+                                                <th>Latency</th>
+                                                <th>Details</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {repairReport.channelHealth.map((ch: any) => (
+                                                <tr key={ch.keyId}>
+                                                    <td><ProviderChip provider={ch.provider} /></td>
+                                                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>{ch.modelTested || 'default'}</td>
+                                                    <td>
+                                                        <span className={`badge ${ch.ok ? 'badge-healthy' : 'badge-error'}`}>
+                                                            <span className="badge-dot" />
+                                                            {ch.ok ? 'Online (200)' : `HTTP ${ch.statusCode || 'Err'}`}
+                                                        </span>
+                                                    </td>
+                                                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem' }}>
+                                                        {ch.latencyMs > 0 ? (
+                                                            <span style={{ color: ch.latencyMs < 500 ? '#10b981' : ch.latencyMs < 1200 ? '#f59e0b' : '#ef4444' }}>
+                                                                ⚡ {ch.latencyMs}ms
+                                                            </span>
+                                                        ) : '—'}
+                                                    </td>
+                                                    <td style={{ fontSize: '0.78rem', color: ch.error ? '#f87171' : 'var(--text-muted)' }}>
+                                                        {ch.error || 'Channel nominal'}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Timeline of Events */}
+                    <div className="glass-panel">
+                        <div className="section-label" style={{ marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <History size={12} color="var(--brand-orange)" />
+                            {t('healing.timeline_title')}
+                            {projectHistory.length > 0 && (
+                                <span className="badge badge-paused" style={{ marginLeft: 'auto', fontSize: '0.72rem' }}>
+                                    {projectHistory.length} {projectHistory.length === 1 ? 'event' : 'events'}
+                                </span>
+                            )}
+                        </div>
+
+                        {loadingHistory ? (
+                            <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                                <RefreshCw size={18} className="spin" style={{ margin: '0 auto 0.5rem' }} />
+                                <div>Cargando historial...</div>
+                            </div>
+                        ) : projectHistory.length === 0 ? (
+                            <div style={{ textAlign: 'center', padding: '2.5rem 1rem', color: 'var(--text-muted)', fontSize: '0.88rem' }}>
+                                <History size={24} style={{ opacity: 0.35, margin: '0 auto 0.75rem', display: 'block' }} />
+                                {t('healing.no_events')}
+                            </div>
+                        ) : (
+                            <div style={{ display: 'grid', gap: '0.85rem' }}>
+                                {projectHistory.map((item: any) => {
+                                    const isAutoHealed = item.eventType === 'auto_healed';
+                                    const isRepaired = item.eventType === 'repaired';
+                                    const isDeprecated = item.eventType === 'model_deprecated';
+
+                                    const badgeCls = isAutoHealed ? 'badge-warning' : isRepaired ? 'badge-healthy' : isDeprecated ? 'badge-error' : 'badge-paused';
+                                    const badgeLabel = isAutoHealed ? t('healing.event_auto_healed') : isRepaired ? t('healing.event_channel_repaired') : isDeprecated ? t('healing.event_model_deprecated') : item.eventType;
+
+                                    return (
+                                        <div
+                                            key={item.id}
+                                            style={{
+                                                padding: '0.95rem 1.15rem',
+                                                borderRadius: 'var(--radius-md)',
+                                                background: 'var(--surface-1)',
+                                                border: isAutoHealed ? '1px solid rgba(245,158,11,0.3)' : '1px solid var(--border-subtle)',
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                gap: '0.5rem',
+                                                transition: 'all 0.15s ease'
+                                            }}
+                                        >
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                                                    <span className={`badge ${badgeCls}`}>
+                                                        <span className="badge-dot" />
+                                                        {badgeLabel}
+                                                    </span>
+                                                    {item.originalModel && item.resolvedModel && (
+                                                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontFamily: 'var(--font-mono)', fontSize: '0.82rem' }}>
+                                                            <span style={{ color: 'var(--text-muted)', textDecoration: isAutoHealed ? 'line-through' : 'none' }}>
+                                                                {item.originalModel}
+                                                            </span>
+                                                            <ArrowRight size={12} style={{ color: 'var(--brand-orange)' }} />
+                                                            <span style={{ color: '#10b981', fontWeight: 600 }}>
+                                                                {item.resolvedModel}
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                                    {new Date(item.timestamp).toLocaleString()}
+                                                </span>
+                                            </div>
+
+                                            {item.reason && (
+                                                <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                                                    {item.reason}
+                                                </p>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
             {/* ═══ TOKEN LIMIT MODAL ═══ */}
             {tokenLimitModal && (
                 <div style={{
@@ -1731,7 +2162,7 @@ export default function ProjectDetail() {
                                 <Sliders size={18} style={{ color: '#a78bfa' }} />
                             </div>
                             <div>
-                                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#fff' }}>
+                                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: 'var(--text-primary)' }}>
                                     {tokenLimitModal.mode === 'global' ? 'Global Output Token Limit' : `Token Limit — ${tokenLimitModal.providerName}`}
                                 </h3>
                                 <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
@@ -1748,8 +2179,7 @@ export default function ProjectDetail() {
                             borderRadius: 'var(--radius-md)', padding: '0.75rem 1rem',
                             marginBottom: '1.25rem', fontSize: '0.76rem', color: 'var(--text-muted)', lineHeight: 1.6,
                         }}>
-                            <strong style={{ color: '#a78bfa' }}>max_tokens cap</strong> — el gateway trunca las respuestas de salida al valor que configures aquí.
-                            Deja en blanco para usar el default global (16,000). Google &amp; Vertex están exentos siempre.
+                            <strong style={{ color: '#a78bfa' }}>max_tokens cap</strong> — {t('project.token_limit_info')}
                         </div>
 
                         {/* Presets */}
@@ -1763,9 +2193,9 @@ export default function ProjectDetail() {
                                         borderRadius: 'var(--radius-pill)',
                                         fontSize: '0.72rem', fontWeight: 700, fontFamily: 'var(--font-mono)',
                                         background: tokenLimitInput === (v === null ? '' : String(v))
-                                            ? 'rgba(139,92,246,0.25)' : 'rgba(255,255,255,0.06)',
+                                            ? 'rgba(139,92,246,0.25)' : 'var(--surface-2)',
                                         border: tokenLimitInput === (v === null ? '' : String(v))
-                                            ? '1px solid rgba(139,92,246,0.5)' : '1px solid rgba(255,255,255,0.1)',
+                                            ? '1px solid rgba(139,92,246,0.5)' : '1px solid var(--border-subtle)',
                                         color: tokenLimitInput === (v === null ? '' : String(v))
                                             ? '#c4b5fd' : 'var(--text-secondary)',
                                         cursor: 'pointer', transition: 'all 0.15s',
@@ -1810,6 +2240,354 @@ export default function ProjectDetail() {
                             >
                                 <Sliders size={14} />
                                 {tokenLimitModal.mode === 'global' ? 'Apply to All Providers' : 'Save Token Limit'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ═══ RATE LIMIT (FREE TIER GUARDIAN) MODAL ═══ */}
+            {rateLimitModal && (
+                <div style={{
+                    position: 'fixed', inset: 0, zIndex: 9999,
+                    background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    animation: 'fadeIn 0.2s ease-out',
+                }} onClick={() => setRateLimitModal(null)}>
+                    <div style={{
+                        background: 'var(--bg-secondary)',
+                        border: '1px solid rgba(255,107,43,0.35)',
+                        borderRadius: 'var(--radius-xl)',
+                        padding: '2rem',
+                        width: '100%', maxWidth: 440,
+                        boxShadow: '0 24px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,107,43,0.2)',
+                        position: 'relative',
+                    }} onClick={e => e.stopPropagation()}>
+                        {/* Header */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                            <div style={{
+                                width: 40, height: 40, borderRadius: 'var(--radius-md)',
+                                background: 'rgba(255,107,43,0.12)', border: '1px solid rgba(255,107,43,0.3)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            }}>
+                                <Shield size={18} style={{ color: 'var(--brand-orange)' }} />
+                            </div>
+                            <div>
+                                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                                    {t('project.limits_modal_title')}
+                                </h3>
+                                <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                                    Provider: <strong style={{ textTransform: 'capitalize', color: 'var(--brand-orange)' }}>{rateLimitModal.providerName}</strong> ({rateLimitModal.billingType})
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Presets */}
+                        <div style={{ marginBottom: '1rem' }}>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '0.35rem' }}>Quick Presets:</div>
+                            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                                <button
+                                    type="button"
+                                    onClick={() => setRateLimitModal(m => m ? { ...m, rpm: 15, tpm: 1000000, rpd: 1500 } : null)}
+                                    className="btn btn-secondary btn-sm"
+                                    style={{ fontSize: '0.7rem', padding: '0.25rem 0.55rem' }}
+                                >
+                                    Gemini Flash (15 RPM)
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setRateLimitModal(m => m ? { ...m, rpm: 30, tpm: 14400, rpd: 14400 } : null)}
+                                    className="btn btn-secondary btn-sm"
+                                    style={{ fontSize: '0.7rem', padding: '0.25rem 0.55rem' }}
+                                >
+                                    Groq (30 RPM)
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setRateLimitModal(m => m ? { ...m, rpm: 30, tpm: 60000, rpd: 14400 } : null)}
+                                    className="btn btn-secondary btn-sm"
+                                    style={{ fontSize: '0.7rem', padding: '0.25rem 0.55rem' }}
+                                >
+                                    Cerebras (30 RPM)
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setRateLimitModal(m => m ? { ...m, rpm: 300, tpm: 500000, rpd: 100000 } : null)}
+                                    className="btn btn-secondary btn-sm"
+                                    style={{ fontSize: '0.7rem', padding: '0.25rem 0.55rem' }}
+                                >
+                                    Paid (High Quota)
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Form Inputs */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                            <div className="form-group" style={{ margin: 0 }}>
+                                <label style={{ fontSize: '0.74rem' }}>{t('project.rpm_limit')}</label>
+                                <input
+                                    type="number"
+                                    min={1}
+                                    value={rateLimitModal.rpm}
+                                    onChange={e => setRateLimitModal(m => m ? { ...m, rpm: parseInt(e.target.value, 10) || 1 } : null)}
+                                    style={{ width: '100%', padding: '0.5rem', fontFamily: 'var(--font-mono)' }}
+                                />
+                            </div>
+                            <div className="form-group" style={{ margin: 0 }}>
+                                <label style={{ fontSize: '0.74rem' }}>{t('project.tpm_limit')}</label>
+                                <input
+                                    type="number"
+                                    min={100}
+                                    step={1000}
+                                    value={rateLimitModal.tpm}
+                                    onChange={e => setRateLimitModal(m => m ? { ...m, tpm: parseInt(e.target.value, 10) || 1000 } : null)}
+                                    style={{ width: '100%', padding: '0.5rem', fontFamily: 'var(--font-mono)' }}
+                                />
+                            </div>
+                            <div className="form-group" style={{ margin: 0 }}>
+                                <label style={{ fontSize: '0.74rem' }}>{t('project.rpd_limit')}</label>
+                                <input
+                                    type="number"
+                                    min={1}
+                                    value={rateLimitModal.rpd}
+                                    onChange={e => setRateLimitModal(m => m ? { ...m, rpd: parseInt(e.target.value, 10) || 1 } : null)}
+                                    style={{ width: '100%', padding: '0.5rem', fontFamily: 'var(--font-mono)' }}
+                                />
+                            </div>
+                            <div className="form-group" style={{ margin: 0 }}>
+                                <label style={{ fontSize: '0.74rem' }}>{t('project.tpd_limit')}</label>
+                                <input
+                                    type="number"
+                                    min={1000}
+                                    step={10000}
+                                    value={rateLimitModal.tpd}
+                                    onChange={e => setRateLimitModal(m => m ? { ...m, tpd: parseInt(e.target.value, 10) || 10000 } : null)}
+                                    style={{ width: '100%', padding: '0.5rem', fontFamily: 'var(--font-mono)' }}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div style={{ display: 'flex', gap: '0.75rem' }}>
+                            <button
+                                onClick={() => setRateLimitModal(null)}
+                                className="btn btn-secondary"
+                                style={{ flex: 1 }}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleSaveRateLimits}
+                                className="btn btn-primary"
+                                style={{ flex: 1.5, justifyContent: 'center' }}
+                            >
+                                <Save size={14} /> {t('project.save_limits')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ═══ MODAL: GATEWAY OPERATING MODES ═══ */}
+            {modesModalOpen && (
+                <div className="modal-backdrop" onClick={() => setModesModalOpen(false)}>
+                    <div
+                        className="modal-card"
+                        onClick={e => e.stopPropagation()}
+                        style={{ maxWidth: '680px', width: '92vw', maxHeight: '85vh', overflowY: 'auto' }}
+                    >
+                        {/* Header */}
+                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+                            <div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                                    <Shield size={18} style={{ color: 'var(--brand-orange)' }} />
+                                    <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                                        {t('modes.modal_title')}
+                                    </h3>
+                                </div>
+                                <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                    {t('modes.modal_subtitle')}
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setModesModalOpen(false)}
+                                className="btn-icon"
+                                aria-label="Close modal"
+                                style={{ opacity: 0.7, padding: '0.25rem' }}
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        {/* Modes Stack */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', marginBottom: '1.5rem' }}>
+                            {/* Mode 1: SOAT */}
+                            <div style={{
+                                padding: '1rem',
+                                borderRadius: 'var(--radius-md)',
+                                background: 'rgba(255,107,43,0.04)',
+                                border: '1px solid rgba(255,107,43,0.2)',
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                                        <PromptAnchorGlyph size={15} color="var(--brand-orange)" />
+                                        <strong style={{ fontSize: '0.88rem', color: 'var(--text-primary)' }}>{t('modes.soat_title')}</strong>
+                                    </div>
+                                    <span style={{
+                                        fontSize: '0.65rem', fontWeight: 800, letterSpacing: '0.06em',
+                                        background: 'rgba(255,107,43,0.15)', color: 'var(--brand-orange)',
+                                        padding: '0.15rem 0.5rem', borderRadius: 'var(--radius-pill)',
+                                    }}>
+                                        {t('modes.active_badge')}
+                                    </span>
+                                </div>
+                                <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                                    {t('modes.soat_desc')}
+                                </p>
+                                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', fontSize: '0.68rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+                                    <span style={{ background: 'var(--surface-1)', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>System Prompt: Index [0]</span>
+                                    <span style={{ background: 'var(--surface-1)', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>Gemini/Claude Cache: ~50% Off</span>
+                                    <span style={{ background: 'var(--surface-1)', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>Semantic Cache: SHA-256</span>
+                                </div>
+                            </div>
+
+                            {/* Mode 2: Rate Limit Guardian */}
+                            <div style={{
+                                padding: '1rem',
+                                borderRadius: 'var(--radius-md)',
+                                background: 'rgba(16,185,129,0.04)',
+                                border: '1px solid rgba(16,185,129,0.2)',
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                                        <RateGuardianGlyph size={15} color="#10b981" />
+                                        <strong style={{ fontSize: '0.88rem', color: 'var(--text-primary)' }}>{t('modes.guardian_title')}</strong>
+                                    </div>
+                                    <span style={{
+                                        fontSize: '0.65rem', fontWeight: 800, letterSpacing: '0.06em',
+                                        background: 'rgba(16,185,129,0.15)', color: '#10b981',
+                                        padding: '0.15rem 0.5rem', borderRadius: 'var(--radius-pill)',
+                                    }}>
+                                        {t('modes.active_badge')}
+                                    </span>
+                                </div>
+                                <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                                    {t('modes.guardian_desc')}
+                                </p>
+                                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', fontSize: '0.68rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+                                    <span style={{ background: 'var(--surface-1)', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>Sliding Windows: RPM / TPM / RPD / TPD</span>
+                                    <span style={{ background: 'var(--surface-1)', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>Backoff Delay: ≤ 6000ms</span>
+                                    <span style={{ background: 'var(--surface-1)', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>Passive Headers Ingestion: Enabled</span>
+                                </div>
+                            </div>
+
+                            {/* Mode 3: Dual Engine */}
+                            <div style={{
+                                padding: '1rem',
+                                borderRadius: 'var(--radius-md)',
+                                background: 'rgba(168,85,247,0.04)',
+                                border: '1px solid rgba(168,85,247,0.2)',
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                                        <DualEngineGlyph size={15} color="#a855f7" />
+                                        <strong style={{ fontSize: '0.88rem', color: 'var(--text-primary)' }}>{t('modes.engine_title')}</strong>
+                                    </div>
+                                    <span style={{
+                                        fontSize: '0.65rem', fontWeight: 800, letterSpacing: '0.06em',
+                                        background: 'rgba(168,85,247,0.15)', color: '#a855f7',
+                                        padding: '0.15rem 0.5rem', borderRadius: 'var(--radius-pill)',
+                                    }}>
+                                        {t('modes.active_badge')}
+                                    </span>
+                                </div>
+                                <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                                    {t('modes.engine_desc')}
+                                </p>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', fontSize: '0.68rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+                                        <span style={{ background: 'var(--surface-1)', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>System 1: TypeSafe Jev (800ms cap)</span>
+                                        <span style={{ background: 'var(--surface-1)', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>System 2: Manager LLM</span>
+                                    </div>
+                                    <Link
+                                        to="/engines"
+                                        onClick={() => setModesModalOpen(false)}
+                                        style={{ fontSize: '0.72rem', color: '#a855f7', fontWeight: 600, textDecoration: 'underline' }}
+                                    >
+                                        {t('modes.config_engine')} →
+                                    </Link>
+                                </div>
+                            </div>
+
+                            {/* Mode 4: Atlas Smart Router */}
+                            <div style={{
+                                padding: '1rem',
+                                borderRadius: 'var(--radius-md)',
+                                background: 'rgba(56,189,248,0.04)',
+                                border: '1px solid rgba(56,189,248,0.2)',
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                                        <RouterCascadeGlyph size={15} color="#38bdf8" />
+                                        <strong style={{ fontSize: '0.88rem', color: 'var(--text-primary)' }}>{t('modes.router_title')}</strong>
+                                    </div>
+                                    <span style={{
+                                        fontSize: '0.65rem', fontWeight: 800, letterSpacing: '0.06em',
+                                        background: 'rgba(56,189,248,0.15)', color: '#38bdf8',
+                                        padding: '0.15rem 0.5rem', borderRadius: 'var(--radius-pill)',
+                                    }}>
+                                        {t('modes.active_badge')}
+                                    </span>
+                                </div>
+                                <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                                    {t('modes.router_desc')}
+                                </p>
+                                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', fontSize: '0.68rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+                                    <span style={{ background: 'var(--surface-1)', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>Tier 1: Economy (Cerebras, Groq)</span>
+                                    <span style={{ background: 'var(--surface-1)', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>Tier 2: Standard (DeepSeek, Puter)</span>
+                                    <span style={{ background: 'var(--surface-1)', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>Tier 3: Premium (OpenAI, Google)</span>
+                                </div>
+                            </div>
+
+                            {/* Mode 5: Fusion Consensus Engine */}
+                            <div style={{
+                                padding: '1rem',
+                                borderRadius: 'var(--radius-md)',
+                                background: 'rgba(234,179,8,0.04)',
+                                border: '1px solid rgba(234,179,8,0.2)',
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                                        <Activity size={14} style={{ color: '#eab308' }} />
+                                        <strong style={{ fontSize: '0.88rem', color: 'var(--text-primary)' }}>{t('modes.fusion_title')}</strong>
+                                    </div>
+                                    <span style={{
+                                        fontSize: '0.65rem', fontWeight: 800, letterSpacing: '0.06em',
+                                        background: 'rgba(234,179,8,0.15)', color: '#eab308',
+                                        padding: '0.15rem 0.5rem', borderRadius: 'var(--radius-pill)',
+                                    }}>
+                                        READY
+                                    </span>
+                                </div>
+                                <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                                    {t('modes.fusion_desc')}
+                                </p>
+                                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', fontSize: '0.68rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+                                    <span style={{ background: 'var(--surface-1)', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>Model: "fusion"</span>
+                                    <span style={{ background: 'var(--surface-1)', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>Panel: 3 Diverse Models</span>
+                                    <span style={{ background: 'var(--surface-1)', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>Synthesis: Dialectical Judge</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                            <button
+                                onClick={() => setModesModalOpen(false)}
+                                className="btn btn-primary"
+                                style={{ minWidth: '100px', justifyContent: 'center' }}
+                            >
+                                OK
                             </button>
                         </div>
                     </div>

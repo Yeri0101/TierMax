@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { fetchApi } from '../api';
-import { FolderOpen, Plus, Trash2, Edit2, Zap, Palette, Key, Activity, Copy, Check, DollarSign, Sparkles, Terminal, Layers, Cpu } from 'lucide-react';
+import { FolderOpen, Plus, Trash2, Edit2, Zap, Palette, Key, Activity, Copy, Check, DollarSign } from 'lucide-react';
+import { TierMaxLogo, AnthropicIcon, RouterCascadeGlyph, DualEngineGlyph } from '../components/Icons';
 import { useLanguage } from '../i18n';
+import { useToast } from '../ToastContext';
 
 type GatewayKeyPreview = {
     id: string;
@@ -48,6 +50,7 @@ const PROJECT_COLORS = [
 export default function Dashboard() {
     const { t } = useLanguage();
     const navigate = useNavigate();
+    const toast = useToast();
     const [projects, setProjects] = useState<Project[]>([]);
     const [newProjectName, setNewProjectName] = useState('');
     const [loading, setLoading] = useState(true);
@@ -156,12 +159,13 @@ export default function Dashboard() {
                 body: JSON.stringify({ name: newProjectName }),
             });
             setNewProjectName('');
+            toast.success(t('dashboard.project_created') || 'Project created successfully');
             if (createdProject?.id) {
                 navigate(`/projects/${createdProject.id}`);
             } else {
                 loadProjects();
             }
-        } catch { alert('Failed to create project'); }
+        } catch { toast.error('Failed to create project'); }
     };
 
     const handleDelete = async (id: string, e: React.MouseEvent) => {
@@ -169,8 +173,9 @@ export default function Dashboard() {
         if (!confirm('Delete this project and all its data?')) return;
         try {
             await fetchApi(`/projects/${id}`, { method: 'DELETE' });
+            toast.success('Project deleted');
             loadProjects();
-        } catch { alert('Failed to delete project'); }
+        } catch { toast.error('Failed to delete project'); }
     };
 
     const handleEditStart = (p: Project, e: React.MouseEvent) => {
@@ -189,8 +194,9 @@ export default function Dashboard() {
                 body: JSON.stringify({ name: editName }),
             });
             setEditingId(null);
+            toast.success('Project renamed');
             loadProjects();
-        } catch { alert('Failed to rename project'); }
+        } catch { toast.error('Failed to rename project'); }
     };
 
     const handleColorChange = async (id: string, color: string, e: React.MouseEvent) => {
@@ -398,7 +404,7 @@ export default function Dashboard() {
             <div className="superpowers-container">
                 <div className="superpowers-header">
                     <div className="flex items-center gap-2">
-                        <Sparkles size={18} style={{ color: 'var(--brand-orange)' }} />
+                        <TierMaxLogo size={18} />
                         <h2 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0, letterSpacing: '-0.01em' }}>
                             TierMax Architecture & Protocols
                         </h2>
@@ -422,7 +428,7 @@ export default function Dashboard() {
                             <div className="superpower-top">
                                 <div className="flex items-center gap-2">
                                     <div className="superpower-icon-box" style={{ background: 'rgba(56,189,248,0.12)', border: '1px solid rgba(56,189,248,0.25)', color: '#38bdf8' }}>
-                                        <Terminal size={17} />
+                                        <AnthropicIcon size={17} />
                                     </div>
                                     <div>
                                         <div className="superpower-title">Anthropic Wire Protocol</div>
@@ -458,7 +464,7 @@ export default function Dashboard() {
                             <div className="superpower-top">
                                 <div className="flex items-center gap-2">
                                     <div className="superpower-icon-box" style={{ background: 'rgba(192,132,252,0.12)', border: '1px solid rgba(192,132,252,0.25)', color: '#c084fc' }}>
-                                        <Layers size={17} />
+                                        <RouterCascadeGlyph size={17} color="#c084fc" />
                                     </div>
                                     <div>
                                         <div className="superpower-title">Virtual Consensus Fusion</div>
@@ -492,7 +498,7 @@ export default function Dashboard() {
                             <div className="superpower-top">
                                 <div className="flex items-center gap-2">
                                     <div className="superpower-icon-box" style={{ background: 'rgba(255,107,43,0.12)', border: '1px solid rgba(255,107,43,0.25)', color: 'var(--brand-orange)' }}>
-                                        <Cpu size={17} />
+                                        <DualEngineGlyph size={17} color="var(--brand-orange)" />
                                     </div>
                                     <div>
                                         <div className="superpower-title">Ecosistema & Modelos</div>

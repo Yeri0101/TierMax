@@ -8,9 +8,13 @@ const upstreamKeys = new Hono();
 upstreamKeys.use('*', authMiddleware);
 
 import { providerStates, resetAllProvidersStatus, resetProviderStatus, pauseProvider } from '../utils/limitTracker';
+import { getAllRateLimitStates, updateCustomLimits } from '../utils/freeTierGuardian';
 
 upstreamKeys.get('/health', async (c) => {
-    return c.json(providerStates);
+    return c.json({
+        providers: providerStates,
+        guardian: getAllRateLimitStates(),
+    });
 });
 
 // List upstream keys — includes a masked key_preview (first 4 + last 4 chars) for identification without exposing the full key
@@ -114,7 +118,16 @@ upstreamKeys.patch('/:id', async (c) => {
         updates.billing_type = body.billing_type === 'free' ? 'free' : 'paid';
     }
 
-    if (Object.keys(updates).length === 0) {
+    if (body.rpm_limit !== undefined || body.tpm_limit !== undefined || body.rpd_limit !== undefined || body.tpd_limit !== undefined) {
+        updateCustomLimits(id, {
+            rpm: body.rpm_limit,
+            tpm: body.tpm_limit,
+            rpd: body.rpd_limit,
+            tpd: body.tpd_limit,
+        });
+    }
+
+    if (Object.keys(updates).length === 0 && body.rpm_limit === undefined && body.tpm_limit === undefined && body.rpd_limit === undefined) {
         return c.json({ error: 'No changes provided' }, 400);
     }
 

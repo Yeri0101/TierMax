@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { supabase } from '../db';
 import { authMiddleware } from '../middleware/auth';
 import { pauseProvider } from '../utils/limitTracker';
+import { getProjectHistory, repairProjectChannels } from '../utils/modelHealing';
 
 const projects = new Hono();
 
@@ -146,6 +147,72 @@ projects.patch('/:id', async (c) => {
     if (error) return c.json({ error: error.message }, 500);
     if (!data || data.length === 0) return c.json({ error: 'Project not found' }, 404);
     return c.json(data[0]);
+});
+
+projects.get('/:id/models', async (c) => {
+    const { id } = c.req.param();
+
+    const [{ data: gwKeys, error: gwError }, { data: upstreamList }] = await Promise.all([
+        supabase
+            .from('gateway_keys')
+            .select('id, key_name, api_key, gateway_key_models(model_name, upstream_key_id)')
+            .eq('project_id', id),
+        supabase
+            .from('upstream_keys')
+            .select('id, provider')
+            .eq('project_id', id)
+    ]);
+
+    if (gwError) return c.json({ error: gwError.message }, 500);
+
+    const modelSet = new Set<string>();
+    const modelsByKey: Record<string, string[]> = {};
+
+    (gwKeys || []).forEach((gk: any) => {
+        const keyModels = (gk.gateway_key_models || [])
+            .map((m: any) => m.model_name)
+            .filter(Boolean);
+        modelsByKey[gk.id] = keyModels;
+        if (gk.api_key) modelsByKey[gk.api_key] = keyModels;
+        keyModels.forEach((m: string) => modelSet.add(m));
+    });
+
+    return c.json({
+        project_id: id,
+        models: Array.from(modelSet),
+        models_by_key: modelsByKey,
+        upstream_providers: (upstreamList || []).map((u: any) => u.provider),
+    });
+});
+
+/**
+ * GET /api/projects/:id/history — Project model changelog & auto-healing audit trail
+ */
+projects.get('/:id/history', async (c) => {
+    const { id } = c.req.param();
+    const history = getProjectHistory(id);
+
+    return c.json({
+        project_id: id,
+        total_events: history.length,
+        events: history,
+    });
+});
+
+/**
+ * POST /api/projects/:id/repair — Active health scanner & Reparador agent
+ */
+projects.post('/:id/repair', async (c) => {
+    const { id } = c.req.param();
+    try {
+        const report = await repairProjectChannels(id);
+        return c.json({
+            ok: true,
+            report,
+        });
+    } catch (err: any) {
+        return c.json({ ok: false, error: err.message }, 500);
+    }
 });
 
 export default projects;

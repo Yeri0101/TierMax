@@ -29,6 +29,8 @@ export interface FusionExecuteOptions {
     streamHandler?: (streamReadable: any) => any;
 }
 
+import { getEngineConfig } from './engineBridge';
+
 /**
  * Default fast & diverse panel candidates in TierMax
  */
@@ -44,24 +46,43 @@ const DEFAULT_FUSION_PANEL = [
 ];
 
 /**
- * Select up to 3 diverse models for the fusion panel based on the gateway key configuration.
+ * Select up to 3 diverse models for the fusion panel:
+ * 1. Explicit body override: body.fusion_models / body.fusion_panel / body.models
+ * 2. Inline model syntax: model = "fusion:model1,model2,model3"
+ * 3. Gateway key configured models (if >= 3)
+ * 4. EngineConfig default fusion models (configured in UI / Engine Settings)
+ * 5. Default high-performance fallback panel
  */
-export function selectFusionPanel(gatewayKey: any): { panel: string[]; judge: string } {
-    const keyModels: string[] = (gatewayKey.gateway_key_models || [])
-        .map((m: any) => m.model_name)
-        .filter((name: string) => name && name !== 'fusion' && name !== 'openclaw/fusion');
+export function selectFusionPanel(gatewayKey: any, body?: any): { panel: string[]; judge: string } {
+    let manualModels: string[] = [];
 
-    const uniqueKeyModels = Array.from(new Set(keyModels));
+    // 1. Check if model name has inline syntax: "fusion:model1,model2,model3"
+    const requestedModel = (body?.model || '').trim();
+    if (requestedModel.includes(':') && (requestedModel.startsWith('fusion:') || requestedModel.startsWith('openclaw/fusion:'))) {
+        const parts = requestedModel.split(':')[1]?.split(',').map((s: string) => s.trim()).filter(Boolean);
+        if (parts && parts.length > 0) {
+            manualModels = parts;
+        }
+    }
+
+    // 2. Check explicit body parameters: body.fusion_models, body.fusion_panel, body.models
+    if (manualModels.length === 0) {
+        const candidateList = body?.fusion_models || body?.fusion_panel || (Array.isArray(body?.models) ? body.models : null);
+        if (Array.isArray(candidateList) && candidateList.length > 0) {
+            manualModels = candidateList.map((m: any) => typeof m === 'string' ? m.trim() : '').filter(Boolean);
+        } else if (typeof candidateList === 'string' && candidateList.includes(',')) {
+            manualModels = candidateList.split(',').map((s: string) => s.trim()).filter(Boolean);
+        }
+    }
 
     let selectedPanel: string[] = [];
 
-    if (uniqueKeyModels.length >= 3) {
-        // Pick 3 diverse models from the key's configured models
-        selectedPanel = uniqueKeyModels.slice(0, 3);
-    } else if (uniqueKeyModels.length > 0) {
-        // Start with what the key has
-        selectedPanel = [...uniqueKeyModels];
-        // Complete with defaults that are distinct
+    if (manualModels.length >= 3) {
+        // Exactly or more than 3 specified manually
+        selectedPanel = manualModels.slice(0, 3);
+    } else if (manualModels.length > 0) {
+        // Less than 3 specified manually; complement with defaults
+        selectedPanel = [...manualModels];
         for (const candidate of DEFAULT_FUSION_PANEL) {
             if (selectedPanel.length >= 3) break;
             if (!selectedPanel.includes(candidate)) {
@@ -69,12 +90,53 @@ export function selectFusionPanel(gatewayKey: any): { panel: string[]; judge: st
             }
         }
     } else {
-        // Key has no models explicitly mapped; fallback to top 3 defaults
-        selectedPanel = DEFAULT_FUSION_PANEL.slice(0, 3);
+        // 3. Check gateway key's models
+        const keyModels: string[] = (gatewayKey?.gateway_key_models || [])
+            .map((m: any) => m.model_name)
+            .filter((name: string) => name && name !== 'fusion' && name !== 'openclaw/fusion');
+
+        const uniqueKeyModels = Array.from(new Set(keyModels));
+
+        if (uniqueKeyModels.length >= 3) {
+            selectedPanel = uniqueKeyModels.slice(0, 3);
+        } else {
+            // 4. Check EngineConfig default fusion models (UI settings)
+            try {
+                const engineConfig = getEngineConfig(false);
+                if (engineConfig?.fusionDefaultModels && Array.isArray(engineConfig.fusionDefaultModels) && engineConfig.fusionDefaultModels.length >= 3) {
+                    selectedPanel = engineConfig.fusionDefaultModels.slice(0, 3);
+                }
+            } catch (_) {}
+
+            if (selectedPanel.length === 0) {
+                if (uniqueKeyModels.length > 0) {
+                    selectedPanel = [...uniqueKeyModels];
+                    for (const candidate of DEFAULT_FUSION_PANEL) {
+                        if (selectedPanel.length >= 3) break;
+                        if (!selectedPanel.includes(candidate)) {
+                            selectedPanel.push(candidate);
+                        }
+                    }
+                } else {
+                    selectedPanel = DEFAULT_FUSION_PANEL.slice(0, 3);
+                }
+            }
+        }
     }
 
-    // Judge model: prioritize deepseek-chat or qwen or the first panel model
-    let judge = selectedPanel.find(m => m.includes('deepseek') || m.includes('qwen') || m.includes('llama')) || selectedPanel[0];
+    // 5. Judge selection: manual override from body (body.fusion_judge, body.judge) or EngineConfig or heuristic
+    let judge = (body?.fusion_judge || body?.judge || '').trim();
+    if (!judge) {
+        try {
+            const engineConfig = getEngineConfig(false);
+            if (engineConfig?.fusionDefaultJudge) {
+                judge = engineConfig.fusionDefaultJudge;
+            }
+        } catch (_) {}
+    }
+    if (!judge || !selectedPanel.includes(judge)) {
+        judge = selectedPanel.find(m => m.includes('deepseek') || m.includes('qwen') || m.includes('llama')) || selectedPanel[0];
+    }
 
     return { panel: selectedPanel, judge };
 }
@@ -121,7 +183,7 @@ export async function executeFusion(options: FusionExecuteOptions): Promise<{
     const { body, gatewayKey, executeChatCompletion } = options;
     const startTime = Date.now();
 
-    const { panel, judge } = selectFusionPanel(gatewayKey);
+    const { panel, judge } = selectFusionPanel(gatewayKey, body);
     const ts = new Date().toISOString();
     console.log(`[${ts}] [Fusion] Starting Multi-Model Fusion pipeline. Panel: ${panel.join(', ')} | Judge: ${judge}`);
 

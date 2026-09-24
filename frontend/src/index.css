@@ -49,8 +49,10 @@
   --glass-border: rgba(255, 150, 80, 0.08);
   --surface-card: rgba(34, 28, 23, 0.78);
   --surface-card-hover: rgba(43, 35, 28, 0.92);
+  --surface-1: rgba(255, 255, 255, 0.03);
   --surface-2: rgba(255, 255, 255, 0.04);
   --surface-hover: rgba(255, 255, 255, 0.09);
+  --bg-card: var(--surface-card);
   --ring-subtle: inset 0 1px 0 rgba(255, 255, 255, 0.045);
 
   /* Shadows */
@@ -132,8 +134,10 @@
   --glass-border: rgba(180, 120, 60, 0.18);
   --surface-card: rgba(255, 252, 248, 0.88);
   --surface-card-hover: rgba(255, 255, 255, 0.96);
+  --surface-1: rgba(0, 0, 0, 0.03);
   --surface-2: rgba(0, 0, 0, 0.05);
   --surface-hover: rgba(0, 0, 0, 0.10);
+  --bg-card: var(--surface-card);
   --ring-subtle: inset 0 1px 0 rgba(255, 255, 255, 0.88);
 
   /* Shadows — softer on light */

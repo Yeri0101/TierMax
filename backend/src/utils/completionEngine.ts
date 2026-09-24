@@ -5,6 +5,15 @@ import { callPuterAI, callPuterAIStream } from './puterClient';
 import { buildCacheKey, getCached, setCached } from './semanticCache';
 import { isProviderSlow, recordLatency, markProviderSlow, LATENCY_ABORT_TIMEOUT_MS } from './latencyGuard';
 import { classifyRequest, filterCandidatesByTier, estimateTokenCount } from './smartRouter';
+import {
+    checkRateLimitCapacity,
+    recordRateLimitConsumption,
+    ingestRateLimitHeaders,
+    markRateLimitExceeded,
+    getOrCreateKeyState
+} from './freeTierGuardian';
+import { consultSystemOne } from './engineBridge';
+import { resolveModelOrHeal, HealingResult } from './modelHealing';
 
 export type UsageBreakdown = {
     prompt_tokens: number;
@@ -160,34 +169,80 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
     // Check if the gateway key is allowed to use this model
     let allowed = allowedModels.filter((m: any) => m.model_name === requestedModel);
 
-    // Fallback: If not explicitly configured on this key, check if project has upstream keys matching model
+    let isHealed = false;
+    let healingInfo: HealingResult | null = null;
+
+    // --- Self-Healing Auto-Remap Engine ---
+    // If model is not explicitly configured on this key (e.g. deprecated or retired by OpenAI/Anthropic),
+    // automatically find the best active replacement in this project to prevent agent failure.
     if (allowed.length === 0) {
+        const configuredProjectModels: string[] = (allowedModels || [])
+            .map((m: any) => m.model_name)
+            .filter(Boolean);
+
         const { data: projectKeys } = await supabase
             .from('upstream_keys')
             .select('id, provider')
             .eq('project_id', gatewayKey.project_id);
 
-        if (projectKeys && projectKeys.length > 0) {
-            let matchingKeys = projectKeys;
+        const projectProviders = (projectKeys || []).map(k => ({ id: k.id, provider: k.provider }));
+
+        const { data: allKeyModels } = await supabase
+            .from('gateway_keys')
+            .select('gateway_key_models(model_name)')
+            .eq('project_id', gatewayKey.project_id);
+
+        (allKeyModels || []).forEach((gk: any) => {
+            (gk.gateway_key_models || []).forEach((m: any) => {
+                if (m.model_name && !configuredProjectModels.includes(m.model_name)) {
+                    configuredProjectModels.push(m.model_name);
+                }
+            });
+        });
+
+        const healResult = resolveModelOrHeal(
+            gatewayKey.project_id,
+            requestedModel,
+            configuredProjectModels,
+            projectProviders
+        );
+
+        if (healResult.healed) {
+            isHealed = true;
+            healingInfo = healResult;
+            console.log(`[CompletionEngine] Self-Healing engaged for project ${gatewayKey.project_id}: '${requestedModel}' -> '${healResult.resolvedModel}'`);
+            requestedModel = healResult.resolvedModel;
+            body.model = requestedModel;
+
+            // Re-bind allowed models using healed model
+            allowed = allowedModels.filter((m: any) => m.model_name === requestedModel);
+            if (allowed.length === 0 && projectKeys && projectKeys.length > 0) {
+                allowed = projectKeys.map(k => ({
+                    upstream_key_id: k.id,
+                    model_name: requestedModel,
+                    upstream_model_name: null,
+                }));
+            }
+        } else if (projectKeys && projectKeys.length > 0) {
+            // Heuristic matching for specific families if not explicitly healed
+            let matchingKeys: any[] = [];
             if (requestedModel.includes('deepseek')) {
-                const matched = projectKeys.filter(k => k.provider === 'deepseek' || k.provider === 'groq' || k.provider === 'openrouter');
-                if (matched.length > 0) matchingKeys = matched;
+                matchingKeys = projectKeys.filter(k => k.provider === 'deepseek' || k.provider === 'groq' || k.provider === 'openrouter');
             } else if (requestedModel.includes('qwen')) {
-                const matched = projectKeys.filter(k => k.provider === 'groq' || k.provider === 'cerebras' || k.provider === 'openrouter');
-                if (matched.length > 0) matchingKeys = matched;
+                matchingKeys = projectKeys.filter(k => k.provider === 'groq' || k.provider === 'cerebras' || k.provider === 'openrouter');
             } else if (requestedModel.includes('kimi') || requestedModel.includes('moonshot')) {
-                const matched = projectKeys.filter(k => k.provider === 'nvidia' || k.provider === 'moonshot' || k.provider === 'openrouter');
-                if (matched.length > 0) matchingKeys = matched;
+                matchingKeys = projectKeys.filter(k => k.provider === 'nvidia' || k.provider === 'moonshot' || k.provider === 'openrouter');
             } else if (requestedModel.includes('minimax')) {
-                const matched = projectKeys.filter(k => k.provider === 'nvidia' || k.provider === 'minimax' || k.provider === 'openrouter');
-                if (matched.length > 0) matchingKeys = matched;
+                matchingKeys = projectKeys.filter(k => k.provider === 'nvidia' || k.provider === 'minimax' || k.provider === 'openrouter');
             }
 
-            allowed = matchingKeys.map(k => ({
-                upstream_key_id: k.id,
-                model_name: requestedModel,
-                upstream_model_name: null,
-            }));
+            if (matchingKeys.length > 0) {
+                allowed = matchingKeys.map(k => ({
+                    upstream_key_id: k.id,
+                    model_name: requestedModel,
+                    upstream_model_name: null,
+                }));
+            }
         }
     }
 
@@ -248,15 +303,28 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
         provider: providerMap[m.upstream_key_id] || 'unknown',
     }));
 
-    const routingTier = classifyRequest({
+    const estimatedTok = estimateTokenCount(body.messages || []);
+    const jevDecision = await consultSystemOne({
         messages: body.messages || [],
         tools: body.tools || [],
+        model: requestedModel,
+        candidateCount: enrichedCandidates.length,
+        hasNearLimitKeys: enrichedCandidates.some((m: any) => {
+            const st = getOrCreateKeyState(m.upstream_key_id, m.provider);
+            return st.status === 'near_limit' || st.status === 'throttled';
+        }),
     });
-    const estimatedTok = estimateTokenCount(body.messages || []);
+    const routingTier = jevDecision.tier;
     candidates = filterCandidatesByTier(routingTier, enrichedCandidates);
 
     const tsRouter = new Date().toISOString();
-    console.log(`[${tsRouter}] [SmartRouter] tier=${routingTier} estimatedTokens=${estimatedTok} candidatesAfterFilter=${candidates.length}/${enrichedCandidates.length}`);
+    console.log(`[${tsRouter}] [DualEngine] tier=${routingTier} engine=${jevDecision.decisionSource} confidence=${jevDecision.confidenceScore}% estimatedTokens=${estimatedTok} candidatesAfterFilter=${candidates.length}/${enrichedCandidates.length}`);
+
+    if (c) {
+        c.header('X-TierMax-Engine', jevDecision.decisionSource);
+        c.header('X-TierMax-Tier', routingTier);
+        c.header('X-TierMax-Confidence', `${jevDecision.confidenceScore}`);
+    }
 
     if (candidates.length === 0) {
         const errObj = { error: { message: `Model ${requestedModel} is not available.`, type: "invalid_request_error" } };
@@ -310,6 +378,34 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
         const timestamp = new Date().toISOString();
         console.log(`[${timestamp}] [Load Balancer] Attempt ${attempt + 1}: Using upstream key ${upstream.id} for model ${requestedModel} (${usedProvider})`);
 
+        // FreeTierGuardian: Proactive rate-limit check to avoid 429 errors
+        const guardianCheck = checkRateLimitCapacity(
+            upstream.id,
+            upstream.provider,
+            upstream.billing_type || 'free',
+            estimatedPromptTokens,
+            {
+                rpm: upstream.rpm_limit,
+                tpm: upstream.tpm_limit,
+                rpd: upstream.rpd_limit,
+                tpd: upstream.tpd_limit,
+            }
+        );
+
+        if (!guardianCheck.canProceedImmediately) {
+            if (guardianCheck.state.status === 'daily_exhausted') {
+                console.log(`[FreeTierGuardian] Skipping key ${upstream.id} (${upstream.provider}): Daily free tier limit reached.`);
+                continue;
+            }
+            if (guardianCheck.shouldWaitMs > 0 && guardianCheck.shouldWaitMs <= 6000) {
+                console.log(`[FreeTierGuardian] Applying smooth rate delay of ${guardianCheck.shouldWaitMs}ms for ${upstream.provider} to prevent 429`);
+                await new Promise(res => setTimeout(res, guardianCheck.shouldWaitMs));
+            } else if (candidates.length > 1) {
+                console.log(`[FreeTierGuardian] Key ${upstream.id} near limit window (${guardianCheck.reason}), rotating to next candidate`);
+                continue;
+            }
+        }
+
         let baseUrl = '';
         if (upstream.provider === 'openai') baseUrl = 'https://api.openai.com/v1/chat/completions';
         else if (upstream.provider === 'groq') baseUrl = 'https://api.groq.com/openai/v1/chat/completions';
@@ -333,6 +429,7 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
                     finalCompletionTokens = 0;
                     finalTokens = Math.max(500, finalPromptTokens + finalCompletionTokens);
                     updateProviderCalls(upstream.id, finalTokens);
+                    recordRateLimitConsumption(upstream.id, finalTokens);
                     const latencyMs = Date.now() - startTime;
                     const costFields = await buildCostFields(requestedModel, 'puter', finalPromptTokens, finalCompletionTokens);
                     insertRequestLog({
@@ -383,6 +480,7 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
                     finalCompletionTokens = usage.completion_tokens;
                     finalTokens = usage.total_tokens;
                     updateProviderCalls(upstream.id, finalTokens);
+                    recordRateLimitConsumption(upstream.id, finalTokens);
 
                     data._openclaw_metadata = { provider: 'puter', upstream_key_id: upstream.id };
                     finalResponse = data;
@@ -545,17 +643,33 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
                 const errMsg = errData.error?.message || response.statusText;
                 markProviderError(upstream.id, isRateLimit ? 'rate_limited' : 'error', errMsg);
 
+                if (isRateLimit) {
+                    const retryAfter = response.headers.get('retry-after');
+                    markRateLimitExceeded(upstream.id, retryAfter ? parseInt(retryAfter, 10) : undefined);
+                }
+
                 finalStatus = response.status;
                 finalErrorMsg = errMsg;
                 finalErrorData = errData;
 
                 const isRequestTooLarge = errData?.error?.code === 'request_too_large' || response.status === 413;
-                if (isRateLimit || response.status >= 500 || isRequestTooLarge) {
+                const isModelNotFound = response.status === 404 || 
+                    (response.status === 400 && (
+                        errMsg?.toLowerCase().includes('model') || 
+                        errMsg?.toLowerCase().includes('deprecated') || 
+                        errMsg?.toLowerCase().includes('not exist') ||
+                        errData?.error?.code === 'model_not_found'
+                    ));
+
+                if (isRateLimit || response.status >= 500 || isRequestTooLarge || isModelNotFound) {
                     continue;
                 } else {
                     break;
                 }
             }
+
+            // Ingest rate limit headers from successful upstream response
+            ingestRateLimitHeaders(upstream.id, response.headers);
 
             // Kie fake 200 interception
             const contentType = response.headers.get('content-type') || '';
@@ -579,6 +693,7 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
                 finalCompletionTokens = 0;
                 finalTokens = Math.max(500, finalPromptTokens + finalCompletionTokens);
                 updateProviderCalls(upstream.id, finalTokens);
+                recordRateLimitConsumption(upstream.id, finalTokens);
 
                 const latencyMs = Date.now() - startTime;
                 const costFields = await buildCostFields(requestedModel, usedProvider, finalPromptTokens, finalCompletionTokens);
@@ -611,6 +726,14 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
                     c.header('Content-Type', 'text/event-stream');
                     c.header('Cache-Control', 'no-cache');
                     c.header('Connection', 'keep-alive');
+                    if (isHealed && healingInfo) {
+                        c.header('X-TierMax-Healed', 'true');
+                        c.header('X-TierMax-Original-Model', healingInfo.originalModel);
+                        c.header('X-TierMax-Resolved-Model', healingInfo.resolvedModel);
+                        if (healingInfo.reason) {
+                            c.header('X-TierMax-Healing-Reason', encodeURIComponent(healingInfo.reason));
+                        }
+                    }
 
                     return stream(c, async (s) => {
                         const reader = response.body!.getReader();
@@ -640,6 +763,7 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
             finalCompletionTokens = usage.completion_tokens;
             finalTokens = usage.total_tokens;
             updateProviderCalls(upstream.id, finalTokens);
+            recordRateLimitConsumption(upstream.id, finalTokens);
             recordLatency(upstream.id, Date.now() - fetchStartMs);
 
             data._openclaw_metadata = {
@@ -684,9 +808,25 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
     }).catch(() => { });
 
     if (finalResponse) {
+        if (isHealed && healingInfo) {
+            finalResponse._openclaw_healing = {
+                healed: true,
+                original_model: healingInfo.originalModel,
+                resolved_model: healingInfo.resolvedModel,
+                reason: healingInfo.reason,
+            };
+        }
         if (c && !isInternalCall && !returnRawStream) {
             c.header('X-Cache', 'MISS');
             c.header('X-Router-Tier', routingTier);
+            if (isHealed && healingInfo) {
+                c.header('X-TierMax-Healed', 'true');
+                c.header('X-TierMax-Original-Model', healingInfo.originalModel);
+                c.header('X-TierMax-Resolved-Model', healingInfo.resolvedModel);
+                if (healingInfo.reason) {
+                    c.header('X-TierMax-Healing-Reason', encodeURIComponent(healingInfo.reason));
+                }
+            }
             return c.json(finalResponse, finalStatus as any);
         }
         return {
@@ -696,6 +836,8 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
             provider: usedProvider,
             upstreamKeyId: usedUpstreamKeyId,
             routingTier,
+            isHealed,
+            healingInfo,
         };
     } else {
         const errRes = finalErrorData && finalErrorData.error ? finalErrorData : { error: { message: finalErrorMsg || "All upstream candidates failed", type: "api_error" } };

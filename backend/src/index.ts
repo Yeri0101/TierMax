@@ -17,6 +17,8 @@ import v1Route from './routes/v1';
 import analyticsRoute from './routes/analytics';
 import batchRoute from './routes/batch';
 import pricingRoute from './routes/pricing';
+import engineRoutes from './routes/engineConfig';
+import channelTesting from './routes/channelTesting';
 
 dotenv.config({ override: true });
 
@@ -31,6 +33,8 @@ app.route('/api/gateway-keys', gatewayKeysRoute);
 app.route('/api/analytics', analyticsRoute);
 app.route('/api/batch', batchRoute);
 app.route('/api/pricing', pricingRoute);
+app.route('/api/engine', engineRoutes);
+app.route('/api/channels', channelTesting);
 app.route('/v1', v1Route);
 // Compatibility aliases for clients setting baseUrl with/without /v1
 app.route('/v1/v1', v1Route);

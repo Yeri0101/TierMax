@@ -1,11 +1,15 @@
 import { useState, useEffect, useContext, createContext, Component } from 'react';
 import type { ReactNode } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom';
-import { Layers, Globe, KeyRound, Home, LogOut, Zap, Shield, Activity, Sun, Moon } from 'lucide-react';
+import { BrowserRouter as Router, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
+import { Globe, KeyRound, LogOut, Sun, Moon, LayoutDashboard } from 'lucide-react';
+import { TierMaxLogo, CyberTerminalGlyph, DualEngineGlyph } from './components/Icons';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import ProjectDetail from './pages/ProjectDetail';
+import Playground from './pages/Playground';
+import EngineSettings from './pages/EngineSettings';
 import { LanguageProvider, useLanguage } from './i18n';
+import { ToastProvider } from './ToastContext';
 import { fetchApi } from './api';
 import './index.css';
 
@@ -102,6 +106,7 @@ class ErrorBoundary extends Component<
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const { language, setLanguage, t } = useLanguage();
   const { theme, toggleTheme } = useTheme();
+  const location = useLocation();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -145,8 +150,8 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       <nav className="navbar">
         {/* Brand */}
         <Link to="/" className="navbar-brand">
-          <div className="navbar-logo">
-            <Layers size={18} style={{ color: 'white' }} />
+          <div className="navbar-logo" style={{ background: 'transparent', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <TierMaxLogo size={30} />
           </div>
           <div>
             <div className="navbar-title" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
@@ -174,29 +179,50 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 5px #22c55e', animation: 'pulseGlow 2s infinite' }} />
               LIVE
             </div>
-            <div className="flex items-center gap-2" style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: '#c084fc', background: 'rgba(192,132,252,0.1)', padding: '0.15rem 0.45rem', borderRadius: '4px', border: '1px solid rgba(192,132,252,0.2)' }}>
-                <Layers size={10} /> FUSION
-              </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: '#38bdf8', background: 'rgba(56,189,248,0.1)', padding: '0.15rem 0.45rem', borderRadius: '4px', border: '1px solid rgba(56,189,248,0.2)' }}>
-                <Zap size={10} /> ANTHROPIC WIRE
-              </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                <Shield size={10} style={{ color: 'var(--brand-amber)' }} /> ANTI-F200
-              </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                <Activity size={10} style={{ color: '#22c55e' }} /> LATENCY
-              </span>
-            </div>
           </div>
         )}
 
         {/* Right actions */}
         <div className="navbar-right">
           {isLoggedIn && (
-            <Link to="/" className="btn btn-secondary btn-icon" title="Dashboard" style={{ textDecoration: 'none' }}>
-              <Home size={16} />
-            </Link>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.3rem',
+              background: 'var(--surface-card)',
+              padding: '0.2rem',
+              borderRadius: 'var(--radius-pill)',
+              border: '1px solid var(--border-subtle)',
+              marginRight: '0.35rem',
+            }}>
+              <Link
+                to="/"
+                className={`btn btn-sm ${location.pathname === '/' || location.pathname.startsWith('/projects') ? 'btn-primary' : 'btn-ghost'}`}
+                style={{ padding: '0.3rem 0.65rem', fontSize: '0.75rem', borderRadius: 'var(--radius-pill)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                title={t('nav.projects')}
+              >
+                <LayoutDashboard size={13} />
+                <span>{t('nav.projects')}</span>
+              </Link>
+              <Link
+                to="/playground"
+                className={`btn btn-sm ${location.pathname === '/playground' ? 'btn-primary' : 'btn-ghost'}`}
+                style={{ padding: '0.3rem 0.65rem', fontSize: '0.75rem', borderRadius: 'var(--radius-pill)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                title={t('nav.playground')}
+              >
+                <CyberTerminalGlyph size={13} />
+                <span>{t('nav.playground')}</span>
+              </Link>
+              <Link
+                to="/engine"
+                className={`btn btn-sm ${location.pathname === '/engine' ? 'btn-primary' : 'btn-ghost'}`}
+                style={{ padding: '0.3rem 0.65rem', fontSize: '0.75rem', borderRadius: 'var(--radius-pill)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                title={t('nav.engine')}
+              >
+                <DualEngineGlyph size={13} />
+                <span>{t('nav.engine')}</span>
+              </Link>
+            </div>
           )}
 
           <button
@@ -282,7 +308,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 <KeyRound size={17} style={{ color: 'var(--brand-orange)' }} />
                 <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>{t('settings.password_title')}</h3>
               </div>
-              <button onClick={() => setShowPasswordModal(false)} className="btn btn-secondary btn-icon">✕</button>
+              <button onClick={() => setShowPasswordModal(false)} className="btn btn-secondary btn-icon" aria-label="Close modal">✕</button>
             </div>
 
             {passwordError && <div className="alert alert-error" style={{ marginBottom: '1rem' }}>{passwordError}</div>}
@@ -321,15 +347,19 @@ function App() {
     <ErrorBoundary>
       <ThemeProvider>
         <LanguageProvider>
-          <Router>
-            <Layout>
-              <Routes>
-                <Route path="/login" element={<Login />} />
-                <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
-                <Route path="/projects/:id" element={<PrivateRoute><ProjectDetail /></PrivateRoute>} />
-              </Routes>
-            </Layout>
-          </Router>
+          <ToastProvider>
+            <Router>
+              <Layout>
+                <Routes>
+                  <Route path="/login" element={<Login />} />
+                  <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+                  <Route path="/projects/:id" element={<PrivateRoute><ProjectDetail /></PrivateRoute>} />
+                  <Route path="/playground" element={<PrivateRoute><Playground /></PrivateRoute>} />
+                  <Route path="/engine" element={<PrivateRoute><EngineSettings /></PrivateRoute>} />
+                </Routes>
+              </Layout>
+            </Router>
+          </ToastProvider>
         </LanguageProvider>
       </ThemeProvider>
     </ErrorBoundary>

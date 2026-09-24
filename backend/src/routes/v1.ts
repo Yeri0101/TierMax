@@ -10,6 +10,7 @@ import { classifyRequest, filterCandidatesByTier, estimateTokenCount } from '../
 import { anthropicToOpenAI, openAIToAnthropic, AnthropicSSETransformer, AnthropicRequest } from '../utils/anthropicAdapter';
 import { executeFusion } from '../utils/fusionEngine';
 import { executeCompletionEngine } from '../utils/completionEngine';
+import { KNOWN_MODEL_MIGRATIONS, getProjectHistory } from '../utils/modelHealing';
 
 
 type Variables = {
@@ -22,7 +23,7 @@ type UsageBreakdown = {
     total_tokens: number;
 };
 
-type PricingMatch = {
+export type PricingMatch = {
     provider: string;
     model_name: string;
     input_price_per_1m: number;
@@ -32,6 +33,71 @@ type PricingMatch = {
 const v1 = new Hono<{ Variables: Variables }>();
 
 v1.use('*', gatewayAuth);
+
+/**
+ * GET /v1/models — OpenAI-compatible model discovery endpoint with alias & migration metadata
+ */
+v1.get('/models', async (c) => {
+    const gatewayKey = c.get('gatewayKey');
+    const allowedModels = gatewayKey?.gateway_key_models || [];
+    const modelList = allowedModels.map((m: any) => {
+        // Find which deprecated models map to this active model
+        const replaces = Object.entries(KNOWN_MODEL_MIGRATIONS)
+            .filter(([_, mig]) => mig.replacement === m.model_name)
+            .map(([dep]) => dep);
+
+        return {
+            id: m.model_name,
+            object: 'model',
+            created: Math.floor(Date.now() / 1000),
+            owned_by: 'tiermax',
+            permission: [],
+            root: m.model_name,
+            parent: null,
+            replaces: replaces.length > 0 ? replaces : undefined,
+        };
+    });
+
+    // Always include virtual meta-models
+    modelList.push({
+        id: 'fusion',
+        object: 'model',
+        created: Math.floor(Date.now() / 1000),
+        owned_by: 'tiermax-consensus',
+        permission: [],
+        root: 'fusion',
+        parent: null,
+        replaces: undefined,
+    });
+
+    if (modelList.length === 1) {
+        modelList.push(
+            { id: 'gemini-2.5-flash', object: 'model', created: Math.floor(Date.now() / 1000), owned_by: 'tiermax', permission: [], root: 'gemini-2.5-flash', parent: null },
+            { id: 'llama-3.3-70b-versatile', object: 'model', created: Math.floor(Date.now() / 1000), owned_by: 'tiermax', permission: [], root: 'llama-3.3-70b-versatile', parent: null }
+        );
+    }
+    return c.json({ object: 'list', data: modelList });
+});
+
+/**
+ * GET /v1/diagnose — Agent introspection endpoint: reveals active models, deprecations, and healing events
+ */
+v1.get('/diagnose', async (c) => {
+    const gatewayKey = c.get('gatewayKey');
+    const projectId = gatewayKey?.project_id;
+    const history = projectId ? getProjectHistory(projectId) : [];
+    const allowedModels = (gatewayKey?.gateway_key_models || []).map((m: any) => m.model_name);
+
+    return c.json({
+        status: 'healthy',
+        project_id: projectId,
+        gateway_key: gatewayKey.key_name || gatewayKey.id,
+        active_models: allowedModels,
+        virtual_models: ['fusion'],
+        deprecated_aliases_supported: Object.keys(KNOWN_MODEL_MIGRATIONS).length,
+        recent_healings: history.filter(h => h.eventType === 'auto_healed').slice(0, 10),
+    });
+});
 
 // In-memory counter for round-robin load balancing
 const modelCounters: Record<string, number> = {};
@@ -218,7 +284,7 @@ v1.post('/chat/completions', async (c) => {
         } catch (_) {}
 
         // --- Virtual Multi-Model Fusion Endpoint ---
-        if (requestedModel === 'fusion' || requestedModel === 'openclaw/fusion') {
+        if (requestedModel === 'fusion' || requestedModel === 'openclaw/fusion' || requestedModel.startsWith('fusion:') || requestedModel.startsWith('openclaw/fusion:')) {
             if (body.stream) {
                 c.header('Content-Type', 'text/event-stream');
                 c.header('Cache-Control', 'no-cache');
@@ -290,7 +356,7 @@ v1.post('/messages', async (c) => {
         const requestedModel = anthropicBody.model || '';
 
         // 1. Virtual Multi-Model Fusion via Anthropic wire format
-        if (requestedModel === 'fusion' || requestedModel === 'openclaw/fusion') {
+        if (requestedModel === 'fusion' || requestedModel === 'openclaw/fusion' || requestedModel.startsWith('fusion:') || requestedModel.startsWith('openclaw/fusion:')) {
             const openAIBody = anthropicToOpenAI(anthropicBody);
 
             if (anthropicBody.stream) {

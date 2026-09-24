@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchApi } from '../api';
-import { Layers, ArrowRight, Lock, User } from 'lucide-react';
+import { ArrowRight, Lock, User } from 'lucide-react';
+import { TierMaxLogo } from '../components/Icons';
 import { useLanguage } from '../i18n';
 
 export default function Login() {
@@ -41,8 +42,8 @@ export default function Login() {
             animation: 'fadeIn 0.35s ease-out',
         }}>
             {/* Logo */}
-            <div className="login-logo">
-                <Layers size={32} style={{ color: 'white' }} />
+            <div className="login-logo" style={{ background: 'transparent', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <TierMaxLogo size={48} />
             </div>
 
             <h1 className="login-title" style={{ fontSize: '1.65rem', marginBottom: '0.25rem' }}>TierMax</h1>

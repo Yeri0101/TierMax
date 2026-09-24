@@ -11,3 +11,15 @@ nohup.out
 # Ad-hoc test scripts
 backend/test-*.js
 test-*.js
+
+# Local runtime engine configs & caches (contains API keys and dynamic state)
+.engine_config.json
+backend/.engine_config.json
+.project_model_history.json
+backend/.project_model_history.json
+.guardian_limits.json
+backend/.guardian_limits.json
+
+# Local submodules / audit folders
+audit-last30days-skill/
+openclaw-gateway-audit/
