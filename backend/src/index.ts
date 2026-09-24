@@ -22,6 +22,8 @@ import batchRoute from './routes/batch';
 import pricingRoute from './routes/pricing';
 import engineRoutes from './routes/engineConfig';
 import channelTesting from './routes/channelTesting';
+import { authMiddleware } from './middleware/auth';
+import { hashPassword, verifyPassword, signAdminToken } from './utils/authSecurity';
 
 dotenv.config({ override: true });
 
@@ -163,35 +165,63 @@ app.get('/health', async (c) => {
 
 
 app.post('/api/auth/login', async (c) => {
-    const { username, password } = await c.req.json();
+    const body = await c.req.json().catch(() => ({}));
+    const username = typeof body.username === 'string' ? body.username.trim() : '';
+    const password = typeof body.password === 'string' ? body.password : '';
 
-    // Very simplistic auth for the admin panel using our Admins table
+    if (!username || !password) {
+        return c.json({ error: 'Username and password are required' }, 400);
+    }
+
     const { data, error } = await supabase
         .from('admins')
         .select('*')
         .eq('username', username)
         .single();
 
-    if (error || !data || data.password_hash !== password) {
-        // Note: In production, use bcrypt to compare hashes. 
-        // For this prototype we will compare plain text to hash column to keep it simple, 
-        // but ideally we should hash it. Let's assume password_hash is plain text for this scaffold unless changed.
+    if (error || !data) {
         return c.json({ error: 'Invalid credentials' }, 401);
     }
 
-    // Issue a simple token (mock JWT for now)
-    return c.json({ token: 'mock-admin-token-123', user: data.username });
+    const storedHash = data.password_hash || data.password || '';
+    if (!verifyPassword(password, storedHash)) {
+        return c.json({ error: 'Invalid credentials' }, 401);
+    }
+
+    // Auto-migrate legacy plaintext password to secure salted scrypt hash
+    if (!storedHash.startsWith('scrypt:')) {
+        const secureHash = hashPassword(password);
+        const updatePayload: Record<string, any> = { password_hash: secureHash };
+        if ('password' in data) {
+            updatePayload.password = null;
+        }
+        await supabase
+            .from('admins')
+            .update(updatePayload)
+            .eq('id', data.id);
+    }
+
+    // Issue a cryptographically signed JWT with 24h expiration
+    const token = await signAdminToken({ id: data.id, username: data.username });
+    return c.json({ token, user: data.username });
 });
 
 // -----------------------------------------------------------------------------
 // UPDATE CREDENTIALS ENDPOINT
 // PUT /api/auth/credentials
 // Allows administrators to securely replace their current username and/or password.
-// Security: Verifies the 'currentPassword' before processing any updates to prevent 
-// unauthorized changes.
+// Security: Protected by authMiddleware and verifies 'currentPassword' before updates.
 // -----------------------------------------------------------------------------
-app.put('/api/auth/credentials', async (c) => {
-    const { currentUsername, currentPassword, newUsername, newPassword } = await c.req.json();
+app.put('/api/auth/credentials', authMiddleware, async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const currentUsername = typeof body.currentUsername === 'string' ? body.currentUsername.trim() : '';
+    const currentPassword = typeof body.currentPassword === 'string' ? body.currentPassword : '';
+    const newUsername = typeof body.newUsername === 'string' ? body.newUsername.trim() : '';
+    const newPassword = typeof body.newPassword === 'string' ? body.newPassword : '';
+
+    if (!currentUsername || !currentPassword) {
+        return c.json({ error: 'Current username and password are required' }, 400);
+    }
 
     const { data, error } = await supabase
         .from('admins')
@@ -199,13 +229,26 @@ app.put('/api/auth/credentials', async (c) => {
         .eq('username', currentUsername)
         .single();
 
-    if (error || !data || data.password_hash !== currentPassword) {
+    if (error || !data) {
+        return c.json({ error: 'Invalid current credentials' }, 401);
+    }
+
+    const storedHash = data.password_hash || data.password || '';
+    if (!verifyPassword(currentPassword, storedHash)) {
         return c.json({ error: 'Invalid current credentials' }, 401);
     }
 
     const updates: any = {};
     if (newUsername) updates.username = newUsername;
-    if (newPassword) updates.password_hash = newPassword;
+    if (newPassword) {
+        if (newPassword.length < 4) {
+            return c.json({ error: 'New password must be at least 4 characters' }, 400);
+        }
+        updates.password_hash = hashPassword(newPassword);
+        if ('password' in data) {
+            updates.password = null; // Clear any legacy plaintext password field
+        }
+    }
 
     if (Object.keys(updates).length === 0) {
         return c.json({ error: 'No new credentials provided' }, 400);
@@ -214,13 +257,13 @@ app.put('/api/auth/credentials', async (c) => {
     const { error: updateError } = await supabase
         .from('admins')
         .update(updates)
-        .eq('username', currentUsername);
+        .eq('id', data.id);
 
     if (updateError) {
         return c.json({ error: updateError.message }, 500);
     }
 
-    return c.json({ success: true, newUsername: newUsername || currentUsername });
+    return c.json({ success: true, newUsername: updates.username || currentUsername });
 });
 
 // Static frontend serving if built dist exists (production / Docker mode)

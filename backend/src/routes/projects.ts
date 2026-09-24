@@ -209,8 +209,9 @@ projects.post('/:id/pause-all', async (c) => {
     const { data: keys, error } = await supabase.from('upstream_keys').select('id').eq('project_id', id);
     if (error) return c.json({ error: error.message }, 500);
 
-    (keys || []).forEach((k: any) => pauseProvider(k.id));
-    return c.json({ success: true, count: keys.length });
+    const safeKeys = keys || [];
+    safeKeys.forEach((k: any) => pauseProvider(k.id));
+    return c.json({ success: true, count: safeKeys.length });
 });
 
 projects.get('/', async (c) => {
@@ -222,6 +223,8 @@ projects.get('/', async (c) => {
         supabase
             .from('request_logs')
             .select('project_id, latency_ms')
+            .order('created_at', { ascending: false })
+            .limit(2000)
     ]);
 
     if (error) return c.json({ error: error.message }, 500);
@@ -294,7 +297,7 @@ projects.get('/:id/models', async (c) => {
     const [{ data: gwKeys, error: gwError }, { data: upstreamList }] = await Promise.all([
         supabase
             .from('gateway_keys')
-            .select('id, key_name, api_key, gateway_key_models(model_name, upstream_key_id)')
+            .select('id, key_name, gateway_key_models(model_name, upstream_key_id)')
             .eq('project_id', id),
         supabase
             .from('upstream_keys')
@@ -312,7 +315,6 @@ projects.get('/:id/models', async (c) => {
             .map((m: any) => m.model_name)
             .filter(Boolean);
         modelsByKey[gk.id] = keyModels;
-        if (gk.api_key) modelsByKey[gk.api_key] = keyModels;
         keyModels.forEach((m: string) => modelSet.add(m));
     });
 

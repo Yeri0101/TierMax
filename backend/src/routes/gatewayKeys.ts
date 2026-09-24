@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { supabase } from '../db';
 import { authMiddleware } from '../middleware/auth';
+import { invalidateGatewayKeyCache } from '../middleware/gatewayAuth';
 import crypto from 'crypto';
 
 const gatewayKeys = new Hono();
@@ -18,7 +19,17 @@ gatewayKeys.get('/', async (c) => {
         .order('created_at', { ascending: false });
 
     if (error) return c.json({ error: error.message }, 500);
-    return c.json(data);
+
+    const sanitized = (data || []).map((row: any) => {
+        const key: string = row.api_key || '';
+        const key_preview = key.length > 9
+            ? `${key.slice(0, 4)}...${key.slice(-5)}`
+            : `${key.slice(0, 4)}...`;
+        const { api_key: _removed, ...rest } = row;
+        return { ...rest, key_preview };
+    });
+
+    return c.json(sanitized);
 });
 
 gatewayKeys.post('/', async (c) => {
@@ -54,19 +65,24 @@ gatewayKeys.post('/', async (c) => {
     // Insert Mapping Models
     // models should be an array of objects: { upstream_key_id, model_name }
     if (models && models.length > 0) {
-        const inserts = models.map((m: any) => ({
-            gateway_key_id: keyData.id,
-            upstream_key_id: m.upstream_key_id,
-            model_name: m.model_name
-        }));
+        const inserts = models
+            .filter((m: any) => m && m.model_name && String(m.model_name).trim())
+            .map((m: any) => ({
+                id: crypto.randomUUID(),
+                gateway_key_id: keyData.id,
+                upstream_key_id: (m.upstream_key_id && String(m.upstream_key_id).trim() !== '') ? m.upstream_key_id : null,
+                model_name: m.model_name.trim()
+            }));
 
-        const { error: modelError } = await supabase.from('gateway_key_models').insert(inserts);
-        if (modelError) {
-            // Note: In real world, we'd use a transaction or rollback
-            console.error("Failed to map models:", modelError);
+        if (inserts.length > 0) {
+            const { error: modelError } = await supabase.from('gateway_key_models').insert(inserts);
+            if (modelError) {
+                console.error("Failed to map models:", modelError);
+            }
         }
     }
 
+    invalidateGatewayKeyCache();
     return c.json(keyData, 201);
 });
 
@@ -74,6 +90,7 @@ gatewayKeys.delete('/:id', async (c) => {
     const { id } = c.req.param();
     const { error } = await supabase.from('gateway_keys').delete().eq('id', id);
     if (error) return c.json({ error: error.message }, 500);
+    invalidateGatewayKeyCache();
     return c.json({ success: true });
 });
 
@@ -118,15 +135,13 @@ gatewayKeys.post('/:id/models', async (c) => {
             }
         }
     }
+    invalidateGatewayKeyCache();
     return c.json({ success: true }, 201);
 });
 
 gatewayKeys.delete('/:id/models/:modelName', async (c) => {
     const { id, modelName } = c.req.param();
 
-    // modelName could have slashes, but hono parameters with slashes need to be encoded. Let's assume it gets passed correctly, or user sends it via query or body. Let's make it a POST endpoint for deletion instead to be safe from model names with slashes OR decode it.
-    // wait, params can be tricky with slashes like meta/llama-3.
-    // Hono handles it if encoded as %2F.
     const decodedModel = decodeURIComponent(modelName);
 
     const { error } = await supabase.from('gateway_key_models')
@@ -135,6 +150,7 @@ gatewayKeys.delete('/:id/models/:modelName', async (c) => {
         .eq('model_name', decodedModel);
 
     if (error) return c.json({ error: error.message }, 500);
+    invalidateGatewayKeyCache();
     return c.json({ success: true });
 });
 

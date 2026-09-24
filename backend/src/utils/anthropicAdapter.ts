@@ -286,6 +286,7 @@ export class AnthropicSSETransformer {
     private outputTokens = 0;
     private lineBuffer = '';
     private ended = false;
+    private activeTools = new Map<number, { index: number; id: string; name: string }>();
 
     constructor(model: string, estimatedPromptTokens = 0) {
         this.messageId = `msg_${Math.random().toString(36).substring(2, 14)}`;
@@ -375,6 +376,67 @@ export class AnthropicSSETransformer {
                         output += `event: content_block_delta\ndata: ${deltaEvent}\n\n`;
                     }
 
+                    // Tool call deltas
+                    if (Array.isArray(delta?.tool_calls) && delta.tool_calls.length > 0) {
+                        if (!this.started) {
+                            output += this.getStartEvents();
+                        }
+
+                        // Close text content block if open
+                        if (this.blockStarted) {
+                            this.blockStarted = false;
+                            const blockStop = JSON.stringify({
+                                type: 'content_block_stop',
+                                index: this.blockIndex
+                            });
+                            output += `event: content_block_stop\ndata: ${blockStop}\n\n`;
+                        }
+
+                        for (const tc of delta.tool_calls) {
+                            const tcIdx = tc.index ?? 0;
+                            let activeTool = this.activeTools.get(tcIdx);
+
+                            if (!activeTool && (tc.id || tc.function?.name)) {
+                                this.blockIndex++;
+                                const currentBlockIndex = this.blockIndex;
+                                const toolId = tc.id || `toolu_${Math.random().toString(36).substring(2, 12)}`;
+                                const toolName = tc.function?.name || 'tool';
+
+                                activeTool = {
+                                    index: currentBlockIndex,
+                                    id: toolId,
+                                    name: toolName
+                                };
+                                this.activeTools.set(tcIdx, activeTool);
+
+                                const startEvent = JSON.stringify({
+                                    type: 'content_block_start',
+                                    index: currentBlockIndex,
+                                    content_block: {
+                                        type: 'tool_use',
+                                        id: toolId,
+                                        name: toolName,
+                                        input: {}
+                                    }
+                                });
+                                output += `event: content_block_start\ndata: ${startEvent}\n\n`;
+                            }
+
+                            if (activeTool && tc.function?.arguments) {
+                                this.outputTokens += Math.ceil(tc.function.arguments.length / 4) || 1;
+                                const argEvent = JSON.stringify({
+                                    type: 'content_block_delta',
+                                    index: activeTool.index,
+                                    delta: {
+                                        type: 'input_json_delta',
+                                        partial_json: tc.function.arguments
+                                    }
+                                });
+                                output += `event: content_block_delta\ndata: ${argEvent}\n\n`;
+                            }
+                        }
+                    }
+
                     if (finishReason) {
                         const mappedReason = mapOpenAIToAnthropicStopReason(finishReason);
                         output += this.getEndEvents(mappedReason);
@@ -410,6 +472,16 @@ export class AnthropicSSETransformer {
             });
             output += `event: content_block_stop\ndata: ${blockStop}\n\n`;
         }
+
+        // Close any active tool blocks
+        for (const [_, tool] of this.activeTools.entries()) {
+            const blockStop = JSON.stringify({
+                type: 'content_block_stop',
+                index: tool.index
+            });
+            output += `event: content_block_stop\ndata: ${blockStop}\n\n`;
+        }
+        this.activeTools.clear();
 
         const msgDelta = JSON.stringify({
             type: 'message_delta',

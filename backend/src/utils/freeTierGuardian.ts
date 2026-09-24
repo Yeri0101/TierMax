@@ -402,15 +402,19 @@ export function markRateLimitExceeded(
  */
 export function updateCustomLimits(
     upstreamKeyId: string,
-    limits: Partial<RateLimitProfile>
-): KeyRateLimitState | null {
-    const state = keyStates.get(upstreamKeyId);
-    if (!state) return null;
+    limits: Partial<RateLimitProfile>,
+    provider = 'google',
+    billingType: 'free' | 'paid' = 'free'
+): KeyRateLimitState {
+    let state = keyStates.get(upstreamKeyId);
+    if (!state) {
+        state = getOrCreateKeyState(upstreamKeyId, provider, billingType);
+    }
 
-    if (limits.rpm !== undefined) state.rpmLimit = Math.max(1, limits.rpm);
-    if (limits.tpm !== undefined) state.tpmLimit = Math.max(100, limits.tpm);
-    if (limits.rpd !== undefined) state.rpdLimit = Math.max(1, limits.rpd);
-    if (limits.tpd !== undefined) state.tpdLimit = Math.max(100, limits.tpd);
+    if (limits.rpm !== undefined && limits.rpm !== null) state.rpmLimit = Math.max(1, limits.rpm);
+    if (limits.tpm !== undefined && limits.tpm !== null) state.tpmLimit = Math.max(100, limits.tpm);
+    if (limits.rpd !== undefined && limits.rpd !== null) state.rpdLimit = Math.max(1, limits.rpd);
+    if (limits.tpd !== undefined && limits.tpd !== null) state.tpdLimit = Math.max(100, limits.tpd);
     state.isCustomLimit = true;
     cleanExpiredWindows(state);
     persistedCustomLimits[upstreamKeyId] = {

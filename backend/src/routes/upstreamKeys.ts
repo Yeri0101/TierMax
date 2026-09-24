@@ -9,6 +9,7 @@ upstreamKeys.use('*', authMiddleware);
 
 import { providerStates, resetAllProvidersStatus, resetProviderStatus, pauseProvider } from '../utils/limitTracker';
 import { getAllRateLimitStates, updateCustomLimits } from '../utils/freeTierGuardian';
+import { invalidateUpstreamKeyCache } from '../utils/completionEngine';
 
 upstreamKeys.get('/health', async (c) => {
     return c.json({
@@ -73,6 +74,7 @@ upstreamKeys.post('/', async (c) => {
         .single();
 
     if (error) return c.json({ error: error.message }, 500);
+    invalidateUpstreamKeyCache();
     return c.json(data, 201);
 });
 
@@ -88,6 +90,7 @@ upstreamKeys.patch('/project/:projectId/billing-type', async (c) => {
         .select('id, project_id, provider, billing_type');
 
     if (error) return c.json({ error: error.message }, 500);
+    invalidateUpstreamKeyCache();
     return c.json({ success: true, billing_type, count: data?.length || 0, providers: data || [] });
 });
 
@@ -127,8 +130,18 @@ upstreamKeys.patch('/:id', async (c) => {
         });
     }
 
-    if (Object.keys(updates).length === 0 && body.rpm_limit === undefined && body.tpm_limit === undefined && body.rpd_limit === undefined) {
+    if (Object.keys(updates).length === 0 && body.rpm_limit === undefined && body.tpm_limit === undefined && body.rpd_limit === undefined && body.tpd_limit === undefined) {
         return c.json({ error: 'No changes provided' }, 400);
+    }
+
+    if (Object.keys(updates).length === 0) {
+        const { data: existing, error: fetchErr } = await supabase
+            .from('upstream_keys')
+            .select('id, project_id, provider, billing_type, created_at')
+            .eq('id', id)
+            .single();
+        if (fetchErr) return c.json({ error: fetchErr.message }, 500);
+        return c.json(existing);
     }
 
     const { data, error } = await supabase
@@ -139,6 +152,7 @@ upstreamKeys.patch('/:id', async (c) => {
         .single();
 
     if (error) return c.json({ error: error.message }, 500);
+    invalidateUpstreamKeyCache(id);
     return c.json(data);
 });
 
@@ -146,6 +160,7 @@ upstreamKeys.delete('/:id', async (c) => {
     const { id } = c.req.param();
     const { error } = await supabase.from('upstream_keys').delete().eq('id', id);
     if (error) return c.json({ error: error.message }, 500);
+    invalidateUpstreamKeyCache(id);
     return c.json({ success: true });
 });
 
@@ -214,6 +229,19 @@ upstreamKeys.post('/:id/pause', async (c) => {
     const { id } = c.req.param();
     pauseProvider(id);
     return c.json({ success: true });
+});
+
+// Reveal full upstream API key — admin-only
+upstreamKeys.get('/:id/reveal', async (c) => {
+    const { id } = c.req.param();
+    const { data, error } = await supabase
+        .from('upstream_keys')
+        .select('id, provider, api_key')
+        .eq('id', id)
+        .single();
+
+    if (error || !data) return c.json({ error: 'Upstream key not found' }, 404);
+    return c.json({ id: data.id, provider: data.provider, api_key: data.api_key });
 });
 
 // A route to fetch available models for a given Upstream Key
@@ -573,9 +601,9 @@ upstreamKeys.post('/:id/test', async (c) => {
         let payload: any = {};
 
         if (['openai', 'openrouter', 'groq', 'cerebras', 'mistral', 'nvidia', 'vercel', 'minimax', 'moonshot', 'deepseek', 'kie', 'zettacore', 'mimo'].includes(keyData.provider)) {
-            if (keyData.provider === 'openai') { url = 'https://api.openai.com/v1/chat/completions'; model = 'gpt-3.5-turbo'; }
+            if (keyData.provider === 'openai') { url = 'https://api.openai.com/v1/chat/completions'; model = 'gpt-4o-mini'; }
             else if (keyData.provider === 'groq') { url = 'https://api.groq.com/openai/v1/chat/completions'; model = 'qwen/qwen3.8-27b'; }
-            else if (keyData.provider === 'openrouter') { url = 'https://openrouter.ai/api/v1/chat/completions'; model = 'google/gemini-2.5-flash-preview'; }
+            else if (keyData.provider === 'openrouter') { url = 'https://openrouter.ai/api/v1/chat/completions'; model = 'openrouter/auto'; }
             else if (keyData.provider === 'cerebras') { url = 'https://api.cerebras.ai/v1/chat/completions'; model = 'llama3.1-8b'; }
             else if (keyData.provider === 'mistral') { url = 'https://api.mistral.ai/v1/chat/completions'; model = 'mistral-small-latest'; }
             else if (keyData.provider === 'nvidia') { url = 'https://integrate.api.nvidia.com/v1/chat/completions'; model = 'moonshotai/kimi-k3'; }
@@ -583,7 +611,7 @@ upstreamKeys.post('/:id/test', async (c) => {
             else if (keyData.provider === 'moonshot') { url = 'https://api.moonshot.cn/v1/chat/completions'; model = 'moonshot-v1-8k'; }
             else if (keyData.provider === 'deepseek') { url = 'https://api.deepseek.com/chat/completions'; model = 'deepseek-chat'; }
 
-            else if (keyData.provider === 'mimo') { url = 'https://api.xiaomimimo.com/v1/chat/completions'; model = 'mimo-v2-pro'; }
+            else if (keyData.provider === 'mimo') { url = 'https://api.xiaomimimo.com/v1/chat/completions'; model = 'mimo-v2.6-flash'; }
             else if (keyData.provider === 'vercel') { url = 'https://ai-gateway.vercel.sh/v1/chat/completions'; model = 'gpt-3.5-turbo'; }
             else if (keyData.provider === 'kie') { url = 'https://api.kie.ai/gemini-1.5-flash/v1/chat/completions'; model = 'gemini-1.5-flash'; }
             else if (keyData.provider === 'zettacore') { url = 'http://localhost:8000/v1/chat/completions'; model = 'arena-claude-opus-4-6'; }

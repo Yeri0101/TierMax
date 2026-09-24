@@ -181,11 +181,12 @@ engineRoutes.post('/calibrate', async (c) => {
         // Apply calibrated limits to in-memory guardian
         calibration.recommendations.forEach((rec: any) => {
             if (rec.id) {
+                const keyMeta = activeKeys.find((k: any) => k.id === rec.id);
                 updateCustomLimits(rec.id, {
                     rpm: rec.recommended_rpm,
                     tpm: rec.recommended_tpm,
                     rpd: rec.recommended_rpd,
-                });
+                }, keyMeta?.provider, keyMeta?.billing_type);
             }
         });
     }

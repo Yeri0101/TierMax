@@ -15,21 +15,40 @@ import { supabase } from '../db';
 
 const batchRoute = new Hono();
 
-// ── Auth helper: resolve project_id from gateway key header ──────────────────
-async function getProjectId(authHeader: string | undefined): Promise<string | null> {
-    if (!authHeader?.startsWith('Bearer ')) return null;
-    const token = authHeader.replace('Bearer ', '');
+import { verifyAdminToken } from '../utils/authSecurity';
+
+// ── Auth helper: resolve project_id from gateway key header or verify admin JWT ──
+async function getProjectId(c: any): Promise<string | null> {
+    const authHeader = c.req.header('Authorization');
+    const xApiKey = c.req.header('x-api-key');
+    let token = '';
+    if (xApiKey) {
+        token = xApiKey.trim();
+    } else if (authHeader?.startsWith('Bearer ')) {
+        token = authHeader.slice(7).trim();
+    }
+    if (!token) return null;
+
+    // 1. Check if token is a Gateway API key
     const { data } = await supabase
         .from('gateway_keys')
         .select('project_id')
         .eq('api_key', token)
         .single();
-    return data?.project_id || null;
+    if (data?.project_id) return data.project_id;
+
+    // 2. Check if token is an authenticated Admin JWT
+    const adminPayload = await verifyAdminToken(token);
+    if (adminPayload?.role === 'admin') {
+        return '__admin__';
+    }
+
+    return null;
 }
 
 // ── POST /api/batch/jobs ─────────────────────────────────────────────────────
 batchRoute.post('/jobs', async (c) => {
-    const projectId = await getProjectId(c.req.header('Authorization'));
+    const projectId = await getProjectId(c);
     if (!projectId) return c.json({ error: 'Unauthorized' }, 401);
 
     const body = await c.req.json().catch(() => null);
@@ -63,16 +82,19 @@ batchRoute.post('/jobs', async (c) => {
 
 // ── GET /api/batch/jobs ──────────────────────────────────────────────────────
 batchRoute.get('/jobs', async (c) => {
-    const projectId = await getProjectId(c.req.header('Authorization'));
+    const projectId = await getProjectId(c);
     if (!projectId) return c.json({ error: 'Unauthorized' }, 401);
 
     const status = c.req.query('status'); // optional filter
     let query = supabase
         .from('batch_jobs')
-        .select('id, type, status, openai_batch_id, error, created_at, updated_at')
-        .eq('project_id', projectId)
+        .select('id, project_id, type, status, openai_batch_id, error, created_at, updated_at')
         .order('created_at', { ascending: false })
         .limit(50);
+
+    if (projectId !== '__admin__') {
+        query = query.eq('project_id', projectId);
+    }
 
     if (status) query = query.eq('status', status);
 
@@ -83,18 +105,33 @@ batchRoute.get('/jobs', async (c) => {
 
 // ── GET /api/batch/jobs/:id ──────────────────────────────────────────────────
 batchRoute.get('/jobs/:id', async (c) => {
-    const projectId = await getProjectId(c.req.header('Authorization'));
+    const projectId = await getProjectId(c);
     if (!projectId) return c.json({ error: 'Unauthorized' }, 401);
 
-    const { data, error } = await supabase
+    let query = supabase
         .from('batch_jobs')
         .select('*')
-        .eq('id', c.req.param('id'))
-        .eq('project_id', projectId)
-        .single();
+        .eq('id', c.req.param('id'));
+
+    if (projectId !== '__admin__') {
+        query = query.eq('project_id', projectId);
+    }
+
+    const { data, error } = await query.single();
 
     if (error || !data) return c.json({ error: 'Job not found' }, 404);
-    return c.json(data);
+
+    // Sanitize payload to prevent leaking upstream api_key
+    const sanitized = { ...data };
+    if (sanitized.payload && typeof sanitized.payload === 'object') {
+        const payloadCopy = { ...sanitized.payload };
+        if (payloadCopy.api_key) {
+            const k = String(payloadCopy.api_key);
+            payloadCopy.api_key = k.length > 8 ? `${k.slice(0, 4)}...${k.slice(-4)}` : '••••••••';
+        }
+        sanitized.payload = payloadCopy;
+    }
+    return c.json(sanitized);
 });
 
 export default batchRoute;

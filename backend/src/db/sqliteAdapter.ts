@@ -440,13 +440,15 @@ export function initSQLiteDatabase(dbFilePath?: string): SQLiteClient {
         const adminId = crypto.randomUUID();
         const defaultAdmin = process.env.DEFAULT_ADMIN_USER || 'admin';
         const defaultPass = process.env.DEFAULT_ADMIN_PASSWORD || 'admin';
+        const salt = crypto.randomBytes(16).toString('hex');
+        const hash = `scrypt:${salt}:${crypto.scryptSync(defaultPass, salt, 64).toString('hex')}`;
         db.prepare('INSERT INTO admins (id, username, password, password_hash) VALUES (?, ?, ?, ?)').run(
             adminId,
             defaultAdmin,
-            defaultPass,
-            defaultPass
+            null, // Do not store plaintext password in database
+            hash
         );
-        console.log(`[TierMax DB] Seeded default administrator account (${defaultAdmin} / ${defaultPass})`);
+        console.log(`[TierMax DB] Seeded default administrator account: ${defaultAdmin}`);
     }
 
     // Seed default project and gateway key if missing
@@ -467,7 +469,7 @@ export function initSQLiteDatabase(dbFilePath?: string): SQLiteClient {
             'Llave de Entrada Local',
             defaultApiKey
         );
-        console.log(`[TierMax DB] Seeded default project and gateway key: ${defaultApiKey}`);
+        console.log(`[TierMax DB] Seeded default project and gateway key (${defaultApiKey.slice(0, 4)}...${defaultApiKey.slice(-4)})`);
     }
 
     return {

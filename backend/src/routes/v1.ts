@@ -114,6 +114,14 @@ function normalizeUsage(usage: any, fallbackPromptTokens = 0): UsageBreakdown {
     };
 }
 
+function sanitizeErrorMessage(msg?: string | null): string | null {
+    if (!msg) return null;
+    return msg
+        .replace(/([?&]key=)[^&\s]+/gi, '$1[REDACTED]')
+        .replace(/(Bearer\s+)[A-Za-z0-9_\-\.]{10,}/gi, '$1[REDACTED]')
+        .replace(/(x-api-key['"]?\s*[:=]\s*['"]?)[A-Za-z0-9_\-\.]{10,}/gi, '$1[REDACTED]');
+}
+
 async function insertRequestLog(entry: {
     project_id: string;
     gateway_key_id: string;
@@ -134,12 +142,16 @@ async function insertRequestLog(entry: {
     pricing_output_per_1m?: number | null;
     error_message?: string | null;
 }) {
-    const { error: logErr } = await supabase.from('request_logs').insert([entry]);
+    const sanitizedEntry = {
+        ...entry,
+        error_message: sanitizeErrorMessage(entry.error_message),
+    };
+    const { error: logErr } = await supabase.from('request_logs').insert([sanitizedEntry]);
     if (logErr) {
         const timestamp = new Date().toISOString();
         console.error(`[${timestamp}] Logging failed:`, logErr);
     }
-    notifyNewRequest(entry);
+    notifyNewRequest(sanitizedEntry);
 }
 
 async function getPricingForModel(model: string, provider: string | null): Promise<PricingMatch | null> {
@@ -204,44 +216,71 @@ async function buildCostFields(model: string, provider: string | null, promptTok
     };
 }
 
+interface CachedProjectBudget {
+    budgetUsd: number | null;
+    alertThresholdPct: number;
+    spentUsd: number;
+    lastChecked: number;
+}
+const projectBudgetCache = new Map<string, CachedProjectBudget>();
+const PROJECT_BUDGET_TTL_MS = 60_000; // 60s cache for budget configuration
+
+export function recordProjectSpend(projectId: string, costUsd: number) {
+    const cached = projectBudgetCache.get(projectId);
+    if (cached) {
+        cached.spentUsd += costUsd;
+    }
+}
+
 async function enforceProjectBudget(c: any, gatewayKey: any) {
-    const { data: project, error: projectError } = await supabase
-        .from('projects')
-        .select('id, name, budget_usd, budget_alert_threshold_pct')
-        .eq('id', gatewayKey.project_id)
-        .single();
+    const projectId = gatewayKey?.project_id;
+    if (!projectId) return null;
 
-    if (projectError || !project) {
-        return c.json({ error: { message: 'Project not found for gateway key', type: 'server_error' } }, 500);
+    let cached = projectBudgetCache.get(projectId);
+    const now = Date.now();
+
+    if (!cached || (now - cached.lastChecked) > PROJECT_BUDGET_TTL_MS) {
+        const { data: project, error: projectError } = await supabase
+            .from('projects')
+            .select('id, name, budget_usd, budget_alert_threshold_pct')
+            .eq('id', projectId)
+            .single();
+
+        if (projectError || !project) {
+            return c.json({ error: { message: 'Project not found for gateway key', type: 'server_error' } }, 500);
+        }
+
+        const budgetUsd = project.budget_usd == null ? null : Number(project.budget_usd);
+        const alertThresholdPct = Number(project.budget_alert_threshold_pct ?? 80);
+
+        let spentUsd = 0;
+        if (budgetUsd != null) {
+            const { data: spendRows } = await supabase
+                .from('request_logs')
+                .select('total_cost_usd')
+                .eq('project_id', projectId);
+            spentUsd = Number((spendRows || []).reduce((sum: number, row: any) => sum + Number(row.total_cost_usd || 0), 0).toFixed(6));
+        }
+
+        cached = { budgetUsd, alertThresholdPct, spentUsd, lastChecked: now };
+        projectBudgetCache.set(projectId, cached);
     }
 
-    if (project.budget_usd == null) return null;
+    if (cached.budgetUsd == null) return null;
 
-    const { data: spendRows, error: spendError } = await supabase
-        .from('request_logs')
-        .select('total_cost_usd')
-        .eq('project_id', gatewayKey.project_id);
-
-    if (spendError) {
-        return c.json({ error: { message: 'Failed to verify project budget', type: 'server_error' } }, 500);
-    }
-
-    const spentUsd = Number((spendRows || []).reduce((sum: number, row: any) => sum + Number(row.total_cost_usd || 0), 0).toFixed(6));
-    const budgetUsd = Number(project.budget_usd);
-
-    if (spentUsd >= budgetUsd) {
+    if (cached.spentUsd >= cached.budgetUsd) {
         return c.json({
             error: {
-                message: `Project budget exceeded. Spent $${spentUsd.toFixed(4)} of $${budgetUsd.toFixed(2)}.`,
+                message: `Project budget exceeded. Spent $${cached.spentUsd.toFixed(4)} of $${cached.budgetUsd.toFixed(2)}.`,
                 type: 'budget_exceeded_error',
             }
         }, 402);
     }
 
     c.set('projectBudget', {
-        budget_usd: budgetUsd,
-        spent_usd: spentUsd,
-        alert_threshold_pct: Number(project.budget_alert_threshold_pct ?? 80),
+        budget_usd: cached.budgetUsd,
+        spent_usd: cached.spentUsd,
+        alert_threshold_pct: cached.alertThresholdPct,
     });
 
     return null;
@@ -271,19 +310,6 @@ v1.post('/chat/completions', async (c) => {
         if (gatewayKey.key_name?.includes('[buf]')) {
             body.stream = false;
         }
-        // Debug: dump body structure to file to diagnose 400 errors
-        try {
-            const { writeFileSync } = await import('fs');
-            writeFileSync('/tmp/openclaw-body.json', JSON.stringify({
-                model: body.model, stream: body.stream, max_tokens: body.max_tokens,
-                tool_choice: body.tool_choice, response_format: body.response_format,
-                keys: Object.keys(body), tools_count: (body.tools || []).length,
-                messages: body.messages?.map((m: any) => ({
-                    role: m.role, has_tool_calls: !!(m.tool_calls?.length),
-                    content_type: typeof m.content, content_len: (m.content || '').length
-                }))
-            }, null, 2));
-        } catch (_) {}
 
         // --- Virtual Multi-Model Fusion Endpoint ---
         const isFusionModel = requestedModel === 'fusion' ||
@@ -295,9 +321,10 @@ v1.post('/chat/completions', async (c) => {
 
         if (isFusionModel) {
             if (body.stream) {
-                c.header('Content-Type', 'text/event-stream');
-                c.header('Cache-Control', 'no-cache');
+                c.header('Content-Type', 'text/event-stream; charset=utf-8');
+                c.header('Cache-Control', 'no-cache, no-transform');
                 c.header('Connection', 'keep-alive');
+                c.header('X-Accel-Buffering', 'no');
 
                 return stream(c, async (s) => {
                     try {
@@ -394,9 +421,10 @@ v1.post('/messages', async (c) => {
             const openAIBody = anthropicToOpenAI(anthropicBody);
 
             if (anthropicBody.stream) {
-                c.header('Content-Type', 'text/event-stream');
-                c.header('Cache-Control', 'no-cache');
+                c.header('Content-Type', 'text/event-stream; charset=utf-8');
+                c.header('Cache-Control', 'no-cache, no-transform');
                 c.header('Connection', 'keep-alive');
+                c.header('X-Accel-Buffering', 'no');
 
                 const transformer = new AnthropicSSETransformer(requestedModel);
 
@@ -470,9 +498,10 @@ v1.post('/messages', async (c) => {
         }
 
         if (anthropicBody.stream) {
-            c.header('Content-Type', 'text/event-stream');
-            c.header('Cache-Control', 'no-cache');
+            c.header('Content-Type', 'text/event-stream; charset=utf-8');
+            c.header('Cache-Control', 'no-cache, no-transform');
             c.header('Connection', 'keep-alive');
+            c.header('X-Accel-Buffering', 'no');
 
             const transformer = new AnthropicSSETransformer(requestedModel);
 
@@ -1080,7 +1109,6 @@ v1.post('/audio/speech', async (c) => {
             headers: {
                 'Content-Type': contentType,
                 'X-OpenClaw-Provider': upstream.provider,
-                'X-OpenClaw-Key': upstream.id,
             },
         });
 

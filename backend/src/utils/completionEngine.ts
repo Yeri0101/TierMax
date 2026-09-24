@@ -64,6 +64,14 @@ export function normalizeUsage(usage: any, fallbackPromptTokens = 0): UsageBreak
     };
 }
 
+function sanitizeErrorMessage(msg?: string | null): string | null {
+    if (!msg) return null;
+    return msg
+        .replace(/([?&]key=)[^&\s]+/gi, '$1[REDACTED]')
+        .replace(/(Bearer\s+)[A-Za-z0-9_\-\.]{10,}/gi, '$1[REDACTED]')
+        .replace(/(x-api-key['"]?\s*[:=]\s*['"]?)[A-Za-z0-9_\-\.]{10,}/gi, '$1[REDACTED]');
+}
+
 export async function insertRequestLog(entry: {
     project_id: string;
     gateway_key_id: string;
@@ -84,15 +92,84 @@ export async function insertRequestLog(entry: {
     pricing_output_per_1m?: number | null;
     error_message?: string | null;
 }) {
-    const { error: logErr } = await supabase.from('request_logs').insert([entry]);
+    const sanitizedEntry = {
+        ...entry,
+        error_message: sanitizeErrorMessage(entry.error_message),
+    };
+    const { error: logErr } = await supabase.from('request_logs').insert([sanitizedEntry]);
     if (logErr) {
         const timestamp = new Date().toISOString();
         console.error(`[${timestamp}] Logging failed:`, logErr);
     }
-    notifyNewRequest(entry);
+    notifyNewRequest(sanitizedEntry);
 }
 
+interface CachedUpstreamKey {
+    data: any;
+    expiresAt: number;
+}
+export const upstreamKeyCache = new Map<string, CachedUpstreamKey>();
+const UPSTREAM_KEY_TTL_MS = 60_000;
+
+export function invalidateUpstreamKeyCache(id?: string): void {
+    if (id) upstreamKeyCache.delete(id);
+    else upstreamKeyCache.clear();
+}
+
+export async function getCachedUpstreamKey(id: string): Promise<any> {
+    const cached = upstreamKeyCache.get(id);
+    if (cached && cached.expiresAt > Date.now()) {
+        return cached.data;
+    }
+    const { data, error } = await supabase
+        .from('upstream_keys')
+        .select('*')
+        .eq('id', id)
+        .single();
+    if (data && !error) {
+        upstreamKeyCache.set(id, { data, expiresAt: Date.now() + UPSTREAM_KEY_TTL_MS });
+    }
+    return data;
+}
+
+export async function getCachedUpstreamMetadata(ids: string[]): Promise<Record<string, { provider: string; billing_type: string }>> {
+    const map: Record<string, { provider: string; billing_type: string }> = {};
+    const missingIds: string[] = [];
+
+    for (const id of ids) {
+        const cached = upstreamKeyCache.get(id);
+        if (cached && cached.expiresAt > Date.now()) {
+            map[id] = { provider: cached.data.provider, billing_type: cached.data.billing_type || 'free' };
+        } else {
+            missingIds.push(id);
+        }
+    }
+
+    if (missingIds.length > 0) {
+        const { data } = await supabase
+            .from('upstream_keys')
+            .select('*')
+            .in('id', missingIds);
+
+        (data || []).forEach((row: any) => {
+            upstreamKeyCache.set(row.id, { data: row, expiresAt: Date.now() + UPSTREAM_KEY_TTL_MS });
+            map[row.id] = { provider: row.provider, billing_type: row.billing_type || 'free' };
+        });
+    }
+
+    return map;
+}
+
+const pricingCache = new Map<string, { data: PricingMatch | null; expiresAt: number }>();
+const PRICING_TTL_MS = 300_000;
+
 export async function getPricingForModel(model: string, provider: string | null): Promise<PricingMatch | null> {
+    const cacheKey = `${model}:${provider || '*'}`;
+    const cached = pricingCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+        return cached.data;
+    }
+
     const { data, error } = await supabase
         .from('model_pricing')
         .select('provider, model_name, input_price_per_1m, output_price_per_1m, is_active')
@@ -106,19 +183,27 @@ export async function getPricingForModel(model: string, provider: string | null)
         return null;
     }
 
-    if (!data || data.length === 0) return null;
+    if (!data || data.length === 0) {
+        pricingCache.set(cacheKey, { data: null, expiresAt: Date.now() + PRICING_TTL_MS });
+        return null;
+    }
 
     const exact = provider ? data.find((row: any) => row.provider === provider) : null;
     const fallback = data.find((row: any) => row.provider === '*');
     const match = exact || fallback;
-    if (!match) return null;
+    if (!match) {
+        pricingCache.set(cacheKey, { data: null, expiresAt: Date.now() + PRICING_TTL_MS });
+        return null;
+    }
 
-    return {
+    const result: PricingMatch = {
         provider: match.provider,
         model_name: match.model_name,
         input_price_per_1m: Number(match.input_price_per_1m || 0),
         output_price_per_1m: Number(match.output_price_per_1m || 0),
     };
+    pricingCache.set(cacheKey, { data: result, expiresAt: Date.now() + PRICING_TTL_MS });
+    return result;
 }
 
 function roundUsd(value: number): number {
@@ -250,6 +335,12 @@ async function executeHighCapacityFailover({
 
         const forwardBody = JSON.parse(JSON.stringify(body));
         forwardBody.model = resolvedModel;
+        delete forwardBody._targetSlotSource;
+        delete forwardBody.fallbackDraftContent;
+        delete forwardBody.fusion_models;
+        delete forwardBody.fusion_panel;
+        delete forwardBody.fusion_judge;
+        delete forwardBody.judge;
 
         // Consolidate multiple system messages for strict upstreams
         if (Array.isArray(forwardBody.messages) && forwardBody.messages.length > 0) {
@@ -681,22 +772,12 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
 
     // --- SOAT: Atlas Smart Router — 3-Tier Classification ---
     const candidateUpstreamIds = candidates.map((m: any) => m.upstream_key_id);
-    const { data: providerMeta } = await supabase
-        .from('upstream_keys')
-        .select('id, provider, billing_type')
-        .in('id', candidateUpstreamIds);
-
-    const providerMap: Record<string, string> = {};
-    const billingMap: Record<string, string> = {};
-    (providerMeta || []).forEach((row: any) => {
-        providerMap[row.id] = row.provider;
-        billingMap[row.id] = row.billing_type || 'free';
-    });
+    const metaMap = await getCachedUpstreamMetadata(candidateUpstreamIds);
 
     const enrichedCandidates = candidates.map((m: any) => ({
         ...m,
-        provider: providerMap[m.upstream_key_id] || 'unknown',
-        billing_type: billingMap[m.upstream_key_id] || 'free',
+        provider: metaMap[m.upstream_key_id]?.provider || 'unknown',
+        billing_type: metaMap[m.upstream_key_id]?.billing_type || 'free',
     }));
 
     const estimatedTok = estimateTokenCount(body.messages || [], body.tools || []);
@@ -795,13 +876,9 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
 
         usedUpstreamKeyId = selectedMapping.upstream_key_id;
 
-        const { data: upstream, error } = await supabase
-            .from('upstream_keys')
-            .select('*')
-            .eq('id', selectedMapping.upstream_key_id)
-            .single();
+        const upstream = await getCachedUpstreamKey(selectedMapping.upstream_key_id);
 
-        if (error || !upstream) {
+        if (!upstream) {
             const timestamp = new Date().toISOString();
             console.error(`[${timestamp}] Upstream provider not found or misconfigured for id: ${selectedMapping.upstream_key_id}`);
             continue;
@@ -1058,6 +1135,15 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
             }
         }
 
+        // DeepSeek & Generic Non-Streaming Normalization:
+        // DeepSeek and other strict APIs reject requests with HTTP 400 if stream_options is present when stream is false.
+        if (!forwardBody.stream) {
+            delete forwardBody.stream_options;
+        }
+        if (upstream.provider === 'deepseek' && !forwardBody.stream) {
+            delete forwardBody.stream_options;
+        }
+
         try {
             const abortController = new AbortController();
             const abortTimer = setTimeout(() => abortController.abort(), LATENCY_ABORT_TIMEOUT_MS);
@@ -1070,10 +1156,12 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${upstream.api_key}`,
+                        'Connection': 'keep-alive',
                         ...(upstream.provider === 'openrouter' ? { 'HTTP-Referer': 'http://localhost:3000', 'X-Title': 'OpenClaw Gateway' } : {})
                     },
                     body: JSON.stringify(forwardBody),
                     signal: abortController.signal,
+                    keepalive: true,
                 });
             } finally {
                 clearTimeout(abortTimer);
@@ -1174,9 +1262,10 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
                 }
 
                 if (c) {
-                    c.header('Content-Type', 'text/event-stream');
-                    c.header('Cache-Control', 'no-cache');
+                    c.header('Content-Type', 'text/event-stream; charset=utf-8');
+                    c.header('Cache-Control', 'no-cache, no-transform');
                     c.header('Connection', 'keep-alive');
+                    c.header('X-Accel-Buffering', 'no');
                     if (isHealed && healingInfo) {
                         c.header('X-TierMax-Healed', 'true');
                         c.header('X-TierMax-Original-Model', healingInfo.originalModel);
@@ -1255,7 +1344,7 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
         prompt_tokens: finalPromptTokens,
         completion_tokens: finalCompletionTokens,
         ...costFields,
-        error_message: finalErrorMsg
+        error_message: finalStatus === 200 ? null : finalErrorMsg
     }).catch(() => { });
 
     if (finalResponse) {

@@ -199,6 +199,7 @@ export async function executeFusion(options: FusionExecuteOptions): Promise<{
             max_tokens: Math.min(body.max_tokens || 1024, 2048),
             _targetSlotSource: slotSource,
         };
+        delete draftBody.stream_options;
 
         const execPromise = executeChatCompletion({
             body: draftBody,

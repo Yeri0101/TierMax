@@ -24,13 +24,14 @@ const DEFAULT_TEST_MODELS: Record<string, string> = {
     groq: 'llama-3.3-70b-versatile',
     cerebras: 'llama3.1-8b',
     openai: 'gpt-4o-mini',
-    openrouter: 'google/gemini-2.0-flash-exp:free',
+    openrouter: 'openrouter/auto',
     mistral: 'mistral-small-latest',
     deepseek: 'deepseek-chat',
     puter: 'gpt-4o-mini',
     nvidia: 'meta/llama-3.1-8b-instruct',
     minimax: 'abab6.5s-chat',
     moonshot: 'moonshot-v1-8k',
+    mimo: 'mimo-v2.6-flash',
 };
 
 function getProviderEndpoint(provider: string, model: string): string {
@@ -44,6 +45,7 @@ function getProviderEndpoint(provider: string, model: string): string {
     if (provider === 'deepseek') return 'https://api.deepseek.com/chat/completions';
     if (provider === 'moonshot') return 'https://api.moonshot.cn/v1/chat/completions';
     if (provider === 'minimax') return 'https://api.minimax.chat/v1/chat/completions';
+    if (provider === 'mimo') return 'https://api.xiaomimimo.com/v1/chat/completions';
     if (provider === 'kie') return `https://api.kie.ai/${encodeURIComponent(model)}/v1/chat/completions`;
     return '';
 }

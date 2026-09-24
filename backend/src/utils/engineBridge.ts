@@ -171,7 +171,7 @@ export async function consultSystemOne(payload: {
 
     try {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 1200); // Strict 1.2s timeout for System 1
+        const timeout = setTimeout(() => controller.abort(), 150); // Strict 150ms fast-timeout for System 1 so upstream TTFT is never blocked
 
         const lastMsg = payload.messages?.slice(-1)[0]?.content;
         const preview = typeof lastMsg === 'string' ? lastMsg.slice(0, 500) : '';
@@ -373,13 +373,59 @@ export async function executeManagerLLM(
         vertex: 'https://generativelanguage.googleapis.com/v1beta/openai',
     };
 
+    const temperature = overrides?.temperature ?? currentConfig.managerTemperature ?? 0.2;
+
+    if (provider === 'anthropic') {
+        const anthropicUrl = overrides?.baseUrl || 'https://api.anthropic.com/v1/messages';
+        const anthropicModel = overrides?.model || currentConfig.managerModel || 'claude-3-5-haiku-20241022';
+        try {
+            const res = await fetch(anthropicUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': apiKey,
+                    'anthropic-version': '2023-06-01',
+                },
+                body: JSON.stringify({
+                    model: anthropicModel,
+                    max_tokens: 1024,
+                    ...(systemPrompt ? { system: systemPrompt } : {}),
+                    messages: [{ role: 'user', content: prompt }],
+                    temperature,
+                }),
+            });
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                return {
+                    success: false,
+                    content: '',
+                    latencyMs: Date.now() - start,
+                    error: `Anthropic Manager LLM HTTP ${res.status}: ${errData?.error?.message || res.statusText}`,
+                };
+            }
+            const data: any = await res.json();
+            const content = data?.content?.[0]?.text || '';
+            return {
+                success: true,
+                content,
+                latencyMs: Date.now() - start,
+            };
+        } catch (err: any) {
+            return {
+                success: false,
+                content: '',
+                latencyMs: Date.now() - start,
+                error: err.message,
+            };
+        }
+    }
+
     let url = overrides?.baseUrl || providerDefaults[provider] || currentConfig.managerBaseUrl || 'https://generativelanguage.googleapis.com/v1beta/openai';
     if (!url.endsWith('/chat/completions')) {
         url = url.replace(/\/+$/, '') + '/chat/completions';
     }
 
     const model = overrides?.model || currentConfig.managerModel || 'gemini-2.5-flash';
-    const temperature = overrides?.temperature ?? currentConfig.managerTemperature ?? 0.2;
 
     const messages = [
         ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),

@@ -64,6 +64,7 @@ analytics.get('/:projectId', async (c) => {
     let paidTokens = 0;
     let freeTokens = 0;
     let totalLatency = 0;
+    let latencyCount = 0;
 
     const providerUsage: Record<string, number> = {};
     const modelUsage: Record<string, number> = {};
@@ -85,7 +86,10 @@ analytics.get('/:projectId', async (c) => {
             totalCostUsd += logCostUsd;
             paidTokens += log.total_tokens || 0;
         }
-        totalLatency += log.latency_ms || 0;
+        if (log.latency_ms != null && log.latency_ms > 0) {
+            totalLatency += log.latency_ms;
+            latencyCount++;
+        }
 
         // Group by provider
         if (log.provider) {
@@ -98,7 +102,7 @@ analytics.get('/:projectId', async (c) => {
         }
     });
 
-    const averageLatency = totalRequests > 0 ? Math.round(totalLatency / totalRequests) : 0;
+    const averageLatency = latencyCount > 0 ? Math.round(totalLatency / latencyCount) : 0;
     const successRate = totalRequests > 0 ? Math.round((successfulRequests / totalRequests) * 100) : 0;
 
     return c.json({
