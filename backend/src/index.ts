@@ -287,6 +287,16 @@ if (distPath) {
 const port = parseInt(process.env.PORT || '3000');
 console.log(`Server is running on port ${port}`);
 
+// Initialize background health prober (first run at 20s, then every 3 mins)
+import('./utils/healthProber').then(({ probeUpstreamHealth }) => {
+    setTimeout(() => {
+        probeUpstreamHealth().catch(() => {});
+        setInterval(() => {
+            probeUpstreamHealth().catch(() => {});
+        }, 180_000);
+    }, 20_000);
+});
+
 serve({
     fetch: app.fetch,
     port

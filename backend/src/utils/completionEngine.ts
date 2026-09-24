@@ -16,6 +16,8 @@ import {
 import { consultSystemOne } from './engineBridge';
 import { resolveModelOrHeal, HealingResult } from './modelHealing';
 import { notifyNewRequest } from './dashboardEvents';
+import { canPassCircuit, recordCircuitSuccess, recordCircuitFailure } from './circuitBreaker';
+import { dispatchAlert } from './alertDispatcher';
 
 export type UsageBreakdown = {
     prompt_tokens: number;
@@ -737,16 +739,17 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
         return { ok: false, status: 403, error: errObj.error };
     }
 
-    // Filter out keys marked as error, rate_limited, or currently slow from our tracker
+    // Filter out keys marked as error, rate_limited, in circuit breaker cooldown, or slow
     const healthyAllowed = allowed.filter((m: any) => {
         return checkAndRecoverProvider(m.upstream_key_id) === 'healthy'
+            && canPassCircuit(m.upstream_key_id)
             && !isProviderSlow(m.upstream_key_id);
     });
 
-    // Fallback to all mappings if everything is unhealthy/slow, EXCEPT explicitly paused ones
+    // Fallback to mappings passing circuit, EXCEPT explicitly paused ones
     let candidates = healthyAllowed.length > 0
         ? healthyAllowed
-        : allowed.filter((m: any) => checkAndRecoverProvider(m.upstream_key_id) !== 'paused');
+        : allowed.filter((m: any) => checkAndRecoverProvider(m.upstream_key_id) !== 'paused' && canPassCircuit(m.upstream_key_id));
 
     if (candidates.length === 0) {
         const errObj = { error: { message: `Gateway: Model ${requestedModel} is not available. All configured providers are exhausted, broken, or paused.`, type: "server_error" } };
@@ -966,6 +969,9 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
         else if (upstream.provider === 'mimo') baseUrl = 'https://api.xiaomimimo.com/v1/chat/completions';
         else if (upstream.provider === 'kie') baseUrl = `https://api.kie.ai/${encodeURIComponent(requestedModel)}/v1/chat/completions`;
         else if (upstream.provider === 'zettacore') baseUrl = 'http://localhost:8000/v1/chat/completions';
+        else if (upstream.provider === 'ollama') baseUrl = (upstream.base_url || 'http://localhost:11434').replace(/\/+$/, '') + '/v1/chat/completions';
+        else if (upstream.provider === 'lmstudio') baseUrl = (upstream.base_url || 'http://localhost:1234').replace(/\/+$/, '') + '/v1/chat/completions';
+        else if (upstream.provider === 'vllm' || upstream.provider === 'local') baseUrl = (upstream.base_url || 'http://localhost:8000').replace(/\/+$/, '') + '/v1/chat/completions';
         else if (upstream.provider === 'puter') {
             try {
                 if (body.stream && !returnRawStream) {
@@ -1227,14 +1233,25 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
                     ));
 
                 if (isRateLimit || response.status >= 500 || isRequestTooLarge || isModelNotFound) {
+                    const { tripped } = recordCircuitFailure(upstream.id, upstream.provider, errMsg);
+                    if (tripped) {
+                        dispatchAlert({
+                            event: 'circuit_trip',
+                            title: `Circuit Breaker Tripped: ${upstream.provider.toUpperCase()}`,
+                            message: `Key ${upstream.id.substring(0, 8)} (${upstream.provider}) entered 60s quarantine. Error: ${errMsg}`,
+                            level: 'warning',
+                            metadata: { key_id: upstream.id, provider: upstream.provider, status: response.status }
+                        });
+                    }
                     continue;
                 } else {
                     break;
                 }
             }
 
-            // Ingest rate limit headers from successful upstream response
+            // Ingest rate limit headers and reset circuit breaker on success
             ingestRateLimitHeaders(upstream.id, response.headers);
+            recordCircuitSuccess(upstream.id);
 
             // Kie fake 200 interception
             const contentType = response.headers.get('content-type') || '';
@@ -1357,8 +1374,10 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
             finalErrorMsg = fetchErr.message;
             if ((fetchErr as Error).name === 'AbortError') {
                 markProviderSlow(upstream.id);
+                recordCircuitFailure(upstream.id, upstream.provider, 'Network fetch timeout aborted');
             } else {
                 markProviderError(upstream.id, 'error', fetchErr.message);
+                recordCircuitFailure(upstream.id, upstream.provider, fetchErr.message);
             }
             continue;
         }

@@ -3,6 +3,8 @@ import { supabase } from '../db';
 import { authMiddleware } from '../middleware/auth';
 import { recordLatency } from '../utils/latencyGuard';
 import { callPuterAI } from '../utils/puterClient';
+import { getCircuitDiagnostics } from '../utils/circuitBreaker';
+import { probeUpstreamHealth } from '../utils/healthProber';
 
 const channelTesting = new Hono();
 
@@ -32,6 +34,10 @@ const DEFAULT_TEST_MODELS: Record<string, string> = {
     minimax: 'abab6.5s-chat',
     moonshot: 'moonshot-v1-8k',
     mimo: 'mimo-v2.6-flash',
+    ollama: 'qwen2.5-coder:latest',
+    lmstudio: 'local-model',
+    vllm: 'default',
+    local: 'default',
 };
 
 function getProviderEndpoint(provider: string, model: string): string {
@@ -47,6 +53,9 @@ function getProviderEndpoint(provider: string, model: string): string {
     if (provider === 'minimax') return 'https://api.minimax.chat/v1/chat/completions';
     if (provider === 'mimo') return 'https://api.xiaomimimo.com/v1/chat/completions';
     if (provider === 'kie') return `https://api.kie.ai/${encodeURIComponent(model)}/v1/chat/completions`;
+    if (provider === 'ollama') return 'http://localhost:11434/v1/chat/completions';
+    if (provider === 'lmstudio') return 'http://localhost:1234/v1/chat/completions';
+    if (provider === 'vllm' || provider === 'local') return 'http://localhost:8000/v1/chat/completions';
     return '';
 }
 
@@ -193,6 +202,15 @@ channelTesting.post('/test-project/:projectId', async (c) => {
         healthyCount: results.filter(r => r.ok).length,
         results,
     });
+});
+
+channelTesting.get('/circuits', (c) => {
+    return c.json({ circuits: getCircuitDiagnostics() });
+});
+
+channelTesting.post('/probe', async (c) => {
+    const results = await probeUpstreamHealth();
+    return c.json(results);
 });
 
 export default channelTesting;

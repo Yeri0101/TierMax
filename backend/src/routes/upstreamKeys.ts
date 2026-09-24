@@ -531,6 +531,42 @@ upstreamKeys.get('/:id/models', async (c) => {
                 ]
             });
         }
+        else if (keyData.provider === 'ollama') {
+            const ollamaUrl = (keyData.base_url || 'http://localhost:11434').replace(/\/+$/, '');
+            try {
+                const res = await fetch(`${ollamaUrl}/api/tags`);
+                if (res.ok) {
+                    const data: any = await res.json();
+                    const models = (data.models || []).map((m: any) => ({ id: m.name || m.model }));
+                    if (models.length > 0) return c.json({ models });
+                }
+            } catch { }
+            return c.json({
+                models: [
+                    { id: 'qwen2.5-coder:latest' },
+                    { id: 'llama3.2:latest' },
+                    { id: 'deepseek-r1:latest' },
+                    { id: 'mistral:latest' },
+                ]
+            });
+        }
+        else if (keyData.provider === 'lmstudio' || keyData.provider === 'vllm' || keyData.provider === 'local') {
+            const localUrl = (keyData.base_url || (keyData.provider === 'lmstudio' ? 'http://localhost:1234' : 'http://localhost:8000')).replace(/\/+$/, '');
+            try {
+                const res = await fetch(`${localUrl}/v1/models`);
+                if (res.ok) {
+                    const data: any = await res.json();
+                    const models = (data.data || []).map((m: any) => ({ id: m.id }));
+                    if (models.length > 0) return c.json({ models });
+                }
+            } catch { }
+            return c.json({
+                models: [
+                    { id: 'local-model' },
+                    { id: 'default' },
+                ]
+            });
+        }
         else if (keyData.provider === 'deepseek') {
             // Try the live /models endpoint first; fall back to curated list if unavailable
             try {
@@ -600,7 +636,7 @@ upstreamKeys.post('/:id/test', async (c) => {
         let model = '';
         let payload: any = {};
 
-        if (['openai', 'openrouter', 'groq', 'cerebras', 'mistral', 'nvidia', 'vercel', 'minimax', 'moonshot', 'deepseek', 'kie', 'zettacore', 'mimo'].includes(keyData.provider)) {
+        if (['openai', 'openrouter', 'groq', 'cerebras', 'mistral', 'nvidia', 'vercel', 'minimax', 'moonshot', 'deepseek', 'kie', 'zettacore', 'mimo', 'ollama', 'lmstudio', 'vllm', 'local'].includes(keyData.provider)) {
             if (keyData.provider === 'openai') { url = 'https://api.openai.com/v1/chat/completions'; model = 'gpt-4o-mini'; }
             else if (keyData.provider === 'groq') { url = 'https://api.groq.com/openai/v1/chat/completions'; model = 'qwen/qwen3.8-27b'; }
             else if (keyData.provider === 'openrouter') { url = 'https://openrouter.ai/api/v1/chat/completions'; model = 'openrouter/auto'; }
@@ -610,11 +646,13 @@ upstreamKeys.post('/:id/test', async (c) => {
             else if (keyData.provider === 'minimax') { url = 'https://api.minimax.chat/v1/chat/completions'; model = 'minimax-text-01'; }
             else if (keyData.provider === 'moonshot') { url = 'https://api.moonshot.cn/v1/chat/completions'; model = 'moonshot-v1-8k'; }
             else if (keyData.provider === 'deepseek') { url = 'https://api.deepseek.com/chat/completions'; model = 'deepseek-chat'; }
-
             else if (keyData.provider === 'mimo') { url = 'https://api.xiaomimimo.com/v1/chat/completions'; model = 'mimo-v2.6-flash'; }
             else if (keyData.provider === 'vercel') { url = 'https://ai-gateway.vercel.sh/v1/chat/completions'; model = 'gpt-3.5-turbo'; }
             else if (keyData.provider === 'kie') { url = 'https://api.kie.ai/gemini-1.5-flash/v1/chat/completions'; model = 'gemini-1.5-flash'; }
             else if (keyData.provider === 'zettacore') { url = 'http://localhost:8000/v1/chat/completions'; model = 'arena-claude-opus-4-6'; }
+            else if (keyData.provider === 'ollama') { url = (keyData.base_url || 'http://localhost:11434').replace(/\/+$/, '') + '/v1/chat/completions'; model = 'qwen2.5-coder:latest'; }
+            else if (keyData.provider === 'lmstudio') { url = (keyData.base_url || 'http://localhost:1234').replace(/\/+$/, '') + '/v1/chat/completions'; model = 'local-model'; }
+            else if (keyData.provider === 'vllm' || keyData.provider === 'local') { url = (keyData.base_url || 'http://localhost:8000').replace(/\/+$/, '') + '/v1/chat/completions'; model = 'default'; }
 
             headers['Authorization'] = `Bearer ${keyData.api_key}`;
             if (preferredModel) model = preferredModel;
