@@ -153,6 +153,303 @@ export async function buildCostFields(model: string, provider: string | null, pr
 }
 
 /**
+ * High-Capacity Failover Engine:
+ * When an agent harness (OpenClaw, Claude Code, SWE-bench) sends large prompts (> 6,500 tokens)
+ * or when upstream providers reject with HTTP 413 (e.g. Groq 7,000 ITPM limit),
+ * this engine automatically rescues the turn by routing to high-context providers
+ * (Google Gemini 1M context / 1M TPM, DeepSeek 128k context, OpenRouter, Mistral)
+ * with zero user interruption and seamless streaming/tools compatibility.
+ */
+async function executeHighCapacityFailover({
+    body,
+    gatewayKey,
+    c,
+    returnRawStream,
+    isInternalCall,
+    originalModel,
+    estimatedPromptTokens,
+    reason,
+}: {
+    body: any;
+    gatewayKey: any;
+    c?: any;
+    returnRawStream?: boolean;
+    isInternalCall?: boolean;
+    originalModel: string;
+    estimatedPromptTokens: number;
+    reason: string;
+}): Promise<any> {
+    console.log(`[CompletionEngine] 🚨 Engaging High-Capacity Context Failover for model '${originalModel}' (${estimatedPromptTokens} tokens). Reason: ${reason}`);
+
+    // Fetch available high-capacity upstream keys (Google, DeepSeek, OpenRouter, Mistral)
+    const { data: projectKeys } = await supabase
+        .from('upstream_keys')
+        .select('*')
+        .eq('project_id', gatewayKey.project_id);
+
+    const { data: allKeys } = await supabase
+        .from('upstream_keys')
+        .select('*');
+
+    const highContextProviders = ['google', 'deepseek', 'openrouter', 'mistral'];
+
+    // Combine project keys first, then gateway-wide keys
+    const candidatePool = [...(projectKeys || [])];
+    (allKeys || []).forEach((k: any) => {
+        if (!candidatePool.some(existing => existing.id === k.id)) {
+            candidatePool.push(k);
+        }
+    });
+
+    const eligibleKeys = candidatePool
+        .filter((k: any) => highContextProviders.includes(k.provider) && checkAndRecoverProvider(k.id) !== 'paused')
+        .sort((a: any, b: any) => {
+            const idxA = highContextProviders.indexOf(a.provider);
+            const idxB = highContextProviders.indexOf(b.provider);
+            return idxA - idxB;
+        });
+
+    if (eligibleKeys.length === 0) {
+        console.error(`[CompletionEngine] High-Capacity Failover failed: No high-capacity upstream keys (Google/DeepSeek/OpenRouter) available in gateway.`);
+        const errObj = {
+            error: {
+                message: `Gateway Context Overflow: The prompt (${estimatedPromptTokens} tokens) exceeds available provider limits (413 Request Too Large), and no high-context provider (Google Gemini, DeepSeek, OpenRouter) is configured.`,
+                type: 'context_overflow_error',
+                code: 'context_length_exceeded'
+            }
+        };
+        if (c && !isInternalCall && !returnRawStream) {
+            return c.json(errObj, 413);
+        }
+        return { ok: false, status: 413, error: errObj.error };
+    }
+
+    const startTime = Date.now();
+
+    for (const upstream of eligibleKeys) {
+        let resolvedModel = 'gemini-2.5-flash';
+        let baseUrl = '';
+
+        if (upstream.provider === 'google' || upstream.provider === 'vertex') {
+            resolvedModel = 'gemini-2.5-flash';
+            baseUrl = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
+        } else if (upstream.provider === 'deepseek') {
+            resolvedModel = 'deepseek-chat';
+            baseUrl = 'https://api.deepseek.com/chat/completions';
+        } else if (upstream.provider === 'openrouter') {
+            resolvedModel = originalModel.includes('qwen') ? 'qwen/qwen-2.5-72b-instruct' : 'openrouter/auto';
+            baseUrl = 'https://openrouter.ai/api/v1/chat/completions';
+        } else if (upstream.provider === 'mistral') {
+            resolvedModel = 'mistral-large-latest';
+            baseUrl = 'https://api.mistral.ai/v1/chat/completions';
+        }
+
+        console.log(`[CompletionEngine] High-Capacity Failover: attempting upstream '${upstream.provider}' with model '${resolvedModel}' (key: ${upstream.id.substring(0, 8)}…)`);
+
+        const forwardBody = JSON.parse(JSON.stringify(body));
+        forwardBody.model = resolvedModel;
+
+        // Consolidate multiple system messages for strict upstreams
+        if (Array.isArray(forwardBody.messages) && forwardBody.messages.length > 0) {
+            const systemMsgs: any[] = [];
+            const otherMsgs: any[] = [];
+            for (const msg of forwardBody.messages) {
+                if (msg.role === 'system') systemMsgs.push(msg);
+                else otherMsgs.push(msg);
+            }
+            if (systemMsgs.length > 0) {
+                const mergedContent = systemMsgs
+                    .map((m: any) => {
+                        if (typeof m.content === 'string') return m.content.trim();
+                        if (Array.isArray(m.content)) {
+                            return m.content.map((b: any) => (typeof b === 'string' ? b : b?.text ?? '')).join('').trim();
+                        }
+                        return '';
+                    })
+                    .filter(Boolean)
+                    .join('\n\n');
+
+                forwardBody.messages = [
+                    { role: 'system', content: mergedContent },
+                    ...otherMsgs,
+                ];
+            }
+        }
+
+        const abortController = new AbortController();
+        const abortTimer = setTimeout(() => abortController.abort(), 60000);
+
+        try {
+            const response = await fetch(baseUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${upstream.api_key}`,
+                    ...(upstream.provider === 'openrouter' ? { 'HTTP-Referer': 'http://localhost:3000', 'X-Title': 'OpenClaw Gateway' } : {})
+                },
+                body: JSON.stringify(forwardBody),
+                signal: abortController.signal,
+            });
+
+            clearTimeout(abortTimer);
+
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                console.warn(`[CompletionEngine] High-Capacity Failover key ${upstream.id.substring(0, 8)} (${upstream.provider}) returned ${response.status}:`, errData?.error?.message || response.statusText);
+                continue;
+            }
+
+            const latencyMs = Date.now() - startTime;
+            const healingReason = `Auto-healed from 413 context overflow (${estimatedPromptTokens} tokens exceeded ${reason}). Routed to 1M-context ${resolvedModel} (${upstream.provider}).`;
+            console.log(`[CompletionEngine] ✅ High-Capacity Failover SUCCESS via ${upstream.provider} (${resolvedModel}) in ${latencyMs}ms`);
+
+            // Handle Streaming
+            if (body.stream && response.body) {
+                const finalPromptTokens = estimatedPromptTokens;
+                const finalCompletionTokens = 0;
+                const finalTokens = Math.max(500, finalPromptTokens + finalCompletionTokens);
+                updateProviderCalls(upstream.id, finalTokens);
+                recordRateLimitConsumption(upstream.id, finalTokens);
+
+                const costFields = await buildCostFields(resolvedModel, upstream.provider, finalPromptTokens, finalCompletionTokens);
+                insertRequestLog({
+                    project_id: gatewayKey.project_id,
+                    gateway_key_id: gatewayKey.id,
+                    upstream_key_id: upstream.id,
+                    provider: upstream.provider,
+                    model: resolvedModel,
+                    status_code: 200,
+                    latency_ms: latencyMs,
+                    total_tokens: finalTokens,
+                    prompt_tokens: finalPromptTokens,
+                    completion_tokens: finalCompletionTokens,
+                    ...costFields,
+                }).catch(() => { });
+
+                if (returnRawStream) {
+                    return {
+                        ok: true,
+                        rawResponse: response,
+                        status: 200,
+                        provider: upstream.provider,
+                        upstreamKeyId: upstream.id,
+                        routingTier: 'high_capacity_failover',
+                        isHealed: true,
+                        healingInfo: {
+                            healed: true,
+                            originalModel,
+                            resolvedModel,
+                            reason: healingReason,
+                        }
+                    };
+                }
+
+                if (c) {
+                    c.header('Content-Type', 'text/event-stream');
+                    c.header('Cache-Control', 'no-cache');
+                    c.header('Connection', 'keep-alive');
+                    c.header('X-TierMax-Healed', 'true');
+                    c.header('X-TierMax-Original-Model', originalModel);
+                    c.header('X-TierMax-Resolved-Model', resolvedModel);
+                    c.header('X-TierMax-Healing-Reason', encodeURIComponent(healingReason));
+
+                    return stream(c, async (s) => {
+                        const reader = response.body!.getReader();
+                        s.onAbort(() => reader.cancel().catch(() => { }));
+                        try {
+                            while (true) {
+                                const { done, value } = await reader.read();
+                                if (done) break;
+                                await s.write(value);
+                            }
+                        } catch (err: any) {
+                            try {
+                                const errEvent = `data: ${JSON.stringify({ error: { message: `Stream terminated (${upstream.provider}): ${err.message}`, type: 'stream_error' } })}\n\ndata: [DONE]\n\n`;
+                                await s.write(new TextEncoder().encode(errEvent));
+                            } catch { }
+                        }
+                    });
+                }
+            }
+
+            // Handle Non-Streaming
+            const data = await response.json();
+            const usage = normalizeUsage(data.usage, estimatedPromptTokens);
+            const finalPromptTokens = usage.prompt_tokens;
+            const finalCompletionTokens = usage.completion_tokens;
+            const finalTokens = usage.total_tokens;
+
+            updateProviderCalls(upstream.id, finalTokens);
+            recordRateLimitConsumption(upstream.id, finalTokens);
+
+            const costFields = await buildCostFields(resolvedModel, upstream.provider, finalPromptTokens, finalCompletionTokens);
+            insertRequestLog({
+                project_id: gatewayKey.project_id,
+                gateway_key_id: gatewayKey.id,
+                upstream_key_id: upstream.id,
+                provider: upstream.provider,
+                model: resolvedModel,
+                status_code: 200,
+                latency_ms: latencyMs,
+                total_tokens: finalTokens,
+                prompt_tokens: finalPromptTokens,
+                completion_tokens: finalCompletionTokens,
+                ...costFields,
+            }).catch(() => { });
+
+            data._openclaw_healing = {
+                healed: true,
+                original_model: originalModel,
+                resolved_model: resolvedModel,
+                reason: healingReason,
+            };
+
+            if (c && !isInternalCall && !returnRawStream) {
+                c.header('X-Cache', 'MISS');
+                c.header('X-Router-Tier', 'high_capacity_failover');
+                c.header('X-TierMax-Healed', 'true');
+                c.header('X-TierMax-Original-Model', originalModel);
+                c.header('X-TierMax-Resolved-Model', resolvedModel);
+                c.header('X-TierMax-Healing-Reason', encodeURIComponent(healingReason));
+                return c.json(data, 200);
+            }
+
+            return {
+                ok: true,
+                data,
+                status: 200,
+                provider: upstream.provider,
+                upstreamKeyId: upstream.id,
+                routingTier: 'high_capacity_failover',
+                isHealed: true,
+                healingInfo: {
+                    healed: true,
+                    originalModel,
+                    resolvedModel,
+                    reason: healingReason,
+                }
+            };
+
+        } catch (fetchErr: any) {
+            clearTimeout(abortTimer);
+            console.warn(`[CompletionEngine] High-Capacity Failover attempt failed on ${upstream.provider}:`, fetchErr.message);
+            continue;
+        }
+    }
+
+    const errObj = {
+        error: {
+            message: `Gateway: High-Capacity Failover attempted all eligible providers (Google, DeepSeek, OpenRouter), but all returned errors for prompt size (${estimatedPromptTokens} tokens).`,
+            type: 'server_error'
+        }
+    };
+    if (c && !isInternalCall && !returnRawStream) {
+        return c.json(errObj, 502);
+    }
+    return { ok: false, status: 502, error: errObj.error };
+}
+
+/**
  * Main completion execution engine.
  * Handles candidate resolution, routing tier filtering, round-robin selection,
  * fallback retry loop, prompt restructuring, latency guard, and provider normalizations.
@@ -384,7 +681,7 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
         billing_type: billingMap[m.upstream_key_id] || 'free',
     }));
 
-    const estimatedTok = estimateTokenCount(body.messages || []);
+    const estimatedTok = estimateTokenCount(body.messages || [], body.tools || []);
     const jevDecision = await consultSystemOne({
         messages: body.messages || [],
         tools: body.tools || [],
@@ -446,7 +743,33 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
     let usedProvider: string | null = null;
     let finalErrorMsg: string | null = null;
     let finalErrorData: any = null;
-    const estimatedPromptTokens = estimateTokenCount(body.messages || []);
+    const estimatedPromptTokens = estimateTokenCount(body.messages || [], body.tools || []);
+
+    // Proactive Context Overflow Filter:
+    // If prompt > 6500 tokens, Groq free-tier keys will reject with HTTP 413 (ITPM limit 7000).
+    if (estimatedPromptTokens > 6500 && candidates.some((cand: any) => cand.provider !== 'groq')) {
+        const nonGroq = candidates.filter((cand: any) => cand.provider !== 'groq');
+        if (nonGroq.length > 0) {
+            console.log(`[CompletionEngine] Large prompt (${estimatedPromptTokens} tokens): filtered out Groq candidates to avoid 413.`);
+            candidates = nonGroq;
+        }
+    }
+
+    if (candidates.length > 0 && candidates.every((cand: any) => cand.provider === 'groq') && estimatedPromptTokens > 6500) {
+        console.log(`[CompletionEngine] Proactive Context-Overflow Bypass: All candidates for ${requestedModel} are Groq keys (7k ITPM limit), but prompt is ${estimatedPromptTokens} tokens. Engaging High-Capacity Failover directly.`);
+        return await executeHighCapacityFailover({
+            body,
+            gatewayKey,
+            c,
+            returnRawStream,
+            isInternalCall,
+            originalModel: requestedModel,
+            estimatedPromptTokens,
+            reason: `Groq free tier 7000 ITPM limit exceeded by prompt (${estimatedPromptTokens} tokens)`,
+        });
+    }
+
+    let had413TooLarge = false;
 
     // Fallback Loop: Tries free candidates first, then paid candidates only if free fails
     for (let attempt = 0; attempt < candidates.length; attempt++) {
@@ -492,6 +815,11 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
                     continue;
                 }
                 console.warn(`[FreeTierGuardian] Key ${upstream.id} (${upstream.provider}) reached daily soft limit, but no alternative available; proceeding with request.`);
+            }
+            if (guardianCheck.shouldWaitMs > 6000) {
+                console.log(`[FreeTierGuardian] Key ${upstream.id} cannot service request (${guardianCheck.reason}), skipping candidate.`);
+                had413TooLarge = true;
+                continue;
             }
             if (guardianCheck.shouldWaitMs > 0 && guardianCheck.shouldWaitMs <= 6000) {
                 console.log(`[FreeTierGuardian] Applying smooth rate delay of ${guardianCheck.shouldWaitMs}ms for ${upstream.provider} to prevent 429`);
@@ -649,7 +977,7 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
         // Context Trim Guard
         if (upstream.max_context_tokens && Array.isArray(forwardBody.messages)) {
             const limit = upstream.max_context_tokens;
-            let estimated = estimateTokenCount(forwardBody.messages);
+            let estimated = estimateTokenCount(forwardBody.messages, forwardBody.tools);
             if (estimated > limit) {
                 const systemMsgs = forwardBody.messages.filter((m: any) => m.role === 'system');
                 const nonSystem = forwardBody.messages.filter((m: any) => m.role !== 'system');
@@ -748,7 +1076,16 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
                 finalErrorMsg = errMsg;
                 finalErrorData = errData;
 
-                const isRequestTooLarge = errData?.error?.code === 'request_too_large' || response.status === 413;
+                const isRequestTooLarge = errData?.error?.code === 'request_too_large' ||
+                    response.status === 413 ||
+                    errMsg?.toLowerCase().includes('request too large') ||
+                    errMsg?.toLowerCase().includes('reduce your message size') ||
+                    errMsg?.toLowerCase().includes('context length exceeded');
+
+                if (isRequestTooLarge) {
+                    had413TooLarge = true;
+                }
+
                 const isModelNotFound = response.status === 404 || 
                     (response.status === 400 && (
                         errMsg?.toLowerCase().includes('model') || 
@@ -936,6 +1273,20 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
             healingInfo,
         };
     } else {
+        if (had413TooLarge || finalStatus === 413) {
+            console.log(`[CompletionEngine] All upstream candidates failed with 413 / Request Too Large. Engaging High-Capacity Failover.`);
+            return await executeHighCapacityFailover({
+                body,
+                gatewayKey,
+                c,
+                returnRawStream,
+                isInternalCall,
+                originalModel: requestedModel,
+                estimatedPromptTokens,
+                reason: `Upstream candidates failed with 413 / Request Too Large (${finalErrorMsg || 'Exceeded context or ITPM limits'})`,
+            });
+        }
+
         const errRes = finalErrorData && finalErrorData.error ? finalErrorData : { error: { message: finalErrorMsg || "All upstream candidates failed", type: "api_error" } };
         errRes._openclaw_metadata = {
             provider: usedProvider,

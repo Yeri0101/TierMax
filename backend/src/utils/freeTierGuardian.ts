@@ -272,6 +272,17 @@ export function checkRateLimitCapacity(
     }
 
     // 3. Check TPM
+    // 3a. If a single request exceeds the key's absolute TPM/ITPM limit, waiting is futile (would trigger HTTP 413)
+    const effectiveSingleRequestLimit = state.provider === 'groq' ? Math.min(state.tpmLimit, 7000) : state.tpmLimit;
+    if (estimatedTokens > effectiveSingleRequestLimit && state.rpmLimit > 0) {
+        return {
+            canProceedImmediately: false,
+            shouldWaitMs: 999999, // Unresolvable by waiting in window
+            reason: `Single request tokens (${estimatedTokens}) exceed provider ${state.provider} ITPM limit (${effectiveSingleRequestLimit})`,
+            state,
+        };
+    }
+
     const currentTpm = state.tokensThisMinute.reduce((sum, item) => sum + item.tokens, 0);
     if (currentTpm + estimatedTokens > state.tpmLimit && state.rpmLimit > 0) {
         const oldestTokenItem = state.tokensThisMinute[0];

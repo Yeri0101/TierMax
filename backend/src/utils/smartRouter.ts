@@ -34,18 +34,28 @@ const ECONOMY_TOKEN_LIMIT = 200;   // < 200 estimated tokens → Economy candida
 const PREMIUM_TOKEN_LIMIT = 1500;  // > 1500 estimated tokens → Premium candidate
 
 // Conservative token estimator: ~3 chars per token for Spanish/JSON/Code plus a 15% safety buffer
-export function estimateTokenCount(messages: any[]): number {
+export function estimateTokenCount(messages: any[], tools?: any[]): number {
     let total = 0;
-    for (const msg of messages) {
-        if (typeof msg.content === 'string') {
-            total += Math.ceil(msg.content.length / 3);
-        } else if (Array.isArray(msg.content)) {
-            for (const block of msg.content) {
-                if (block?.text) total += Math.ceil(block.text.length / 3);
+    if (Array.isArray(messages)) {
+        for (const msg of messages) {
+            if (typeof msg?.content === 'string') {
+                total += Math.ceil(msg.content.length / 3);
+            } else if (Array.isArray(msg?.content)) {
+                for (const block of msg.content) {
+                    if (block?.text) total += Math.ceil(block.text.length / 3);
+                }
             }
+            // Tool calls add overhead
+            if (msg?.tool_calls?.length) total += msg.tool_calls.length * 50;
         }
-        // Tool calls add overhead
-        if (msg.tool_calls?.length) total += msg.tool_calls.length * 50;
+    }
+    // Agent harness tool definitions (JSON Schema) add significant token overhead
+    if (Array.isArray(tools) && tools.length > 0) {
+        try {
+            total += Math.ceil(JSON.stringify(tools).length / 3);
+        } catch {
+            total += tools.length * 200;
+        }
     }
     // Apply a 15% safety margin to ensure we never underestimate
     return Math.ceil(total * 1.15);
