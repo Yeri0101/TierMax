@@ -188,7 +188,7 @@ export async function executeFusion(options: FusionExecuteOptions): Promise<{
     const engineConfig = getEngineConfig(false);
     const slotProjects = engineConfig?.fusionSlotProjects || [];
 
-    // 1. Dispatch 3 drafts in parallel
+    // 1. Dispatch 3 drafts in parallel with per-draft 15s timeout
     const draftPromises = panel.map(async (model, idx): Promise<FusionDraft> => {
         const draftStart = Date.now();
         const slotSource = slotProjects[idx] || '';
@@ -200,11 +200,17 @@ export async function executeFusion(options: FusionExecuteOptions): Promise<{
             _targetSlotSource: slotSource,
         };
 
-        const result = await executeChatCompletion({
+        const execPromise = executeChatCompletion({
             body: draftBody,
             gatewayKey,
             isInternalCall: true,
         });
+
+        const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error(`Draft timeout for ${model} after 15s`)), 15000)
+        );
+
+        const result: any = await Promise.race([execPromise, timeoutPromise]);
 
         const latencyMs = Date.now() - draftStart;
         const content = result?.choices?.[0]?.message?.content || '';
@@ -253,6 +259,7 @@ export async function executeFusion(options: FusionExecuteOptions): Promise<{
 
     // 2. Dialectical Synthesis with Judge Model
     const synthesisMessages = buildDialecticalPrompt(body.messages || [], successfulDrafts);
+    const bestDraft = successfulDrafts[0];
 
     const judgeSlotSource = slotProjects[3] || '';
     const judgeBody = {
@@ -261,15 +268,36 @@ export async function executeFusion(options: FusionExecuteOptions): Promise<{
         messages: synthesisMessages,
         stream: !!body.stream,
         _targetSlotSource: judgeSlotSource,
+        fallbackDraftContent: bestDraft.content,
     };
 
     console.log(`[Fusion] Dispatching dialectical synthesis to judge model: ${judge} (stream=${judgeBody.stream}, source=${judgeSlotSource || 'default'})`);
 
-    const judgeResult = await executeChatCompletion({
-        body: judgeBody,
-        gatewayKey,
-        isInternalCall: false, // allow streaming if requested
-    });
+    let judgeResult: any;
+    try {
+        judgeResult = await executeChatCompletion({
+            body: judgeBody,
+            gatewayKey,
+            isInternalCall: false, // allow streaming if requested
+        });
+    } catch (judgeErr: any) {
+        console.warn(`[Fusion] Judge dispatch failed (${judgeErr.message}). Falling back directly to winning draft (${bestDraft.model}).`);
+        judgeResult = {
+            id: `chatcmpl-fusion-${Date.now()}`,
+            object: 'chat.completion',
+            created: Math.floor(Date.now() / 1000),
+            model: judge,
+            choices: [{
+                index: 0,
+                message: {
+                    role: 'assistant',
+                    content: bestDraft.content,
+                },
+                finish_reason: 'stop',
+            }],
+            usage: bestDraft.usage,
+        };
+    }
 
     const totalLatencyMs = Date.now() - startTime;
 

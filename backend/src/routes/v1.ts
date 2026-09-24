@@ -313,13 +313,30 @@ v1.post('/chat/completions', async (c) => {
                                     isInternalCall: true,
                                     returnRawStream: true,
                                 });
-                                if (streamRes.rawResponse?.body) {
+                                if (streamRes.ok && streamRes.rawResponse?.body) {
                                     const reader = streamRes.rawResponse.body.getReader();
                                     while (true) {
                                         const { done, value } = await reader.read();
                                         if (done) break;
                                         await s.write(value);
                                     }
+                                } else if (subBody.fallbackDraftContent) {
+                                    console.warn(`[Fusion] Judge stream failed (${streamRes.error?.message || 'unknown'}). Streaming winning draft directly.`);
+                                    const chunkId = `chatcmpl-fusion-${Date.now()}`;
+                                    const chunk = {
+                                        id: chunkId,
+                                        object: 'chat.completion.chunk',
+                                        created: Math.floor(Date.now() / 1000),
+                                        model: subBody.model,
+                                        choices: [{
+                                            index: 0,
+                                            delta: { content: subBody.fallbackDraftContent, role: 'assistant' },
+                                            finish_reason: 'stop'
+                                        }]
+                                    };
+                                    await s.write(new TextEncoder().encode(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`));
+                                } else {
+                                    throw new Error(streamRes.error?.message || `Judge model (${subBody.model}) failed to stream response`);
                                 }
                             }
                         });

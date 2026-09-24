@@ -477,6 +477,22 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
                 .select('id, provider')
                 .eq('project_id', projId);
             if (projKeys && projKeys.length > 0) {
+                const sampleProvider = projKeys[0].provider;
+                // Auto-heal model if provider cannot service requested model
+                if (sampleProvider === 'mimo' && !requestedModel.toLowerCase().includes('mimo')) {
+                    console.log(`[CompletionEngine] Auto-healing slot model '${requestedModel}' for Mimo channel to 'mimo-v2.6-flash'`);
+                    requestedModel = 'mimo-v2.6-flash';
+                    body.model = requestedModel;
+                } else if (sampleProvider === 'deepseek' && (!requestedModel.toLowerCase().includes('deepseek') || requestedModel.toLowerCase().includes('deepseek-v4'))) {
+                    console.log(`[CompletionEngine] Auto-healing slot model '${requestedModel}' for DeepSeek channel to 'deepseek-chat'`);
+                    requestedModel = 'deepseek-chat';
+                    body.model = requestedModel;
+                } else if (sampleProvider === 'openrouter' && (requestedModel.includes('max-prime') || requestedModel.includes('qwen3.8-max'))) {
+                    console.log(`[CompletionEngine] Auto-healing '${requestedModel}' for OpenRouter channel to 'qwen/qwen-2.5-72b-instruct'`);
+                    requestedModel = 'qwen/qwen-2.5-72b-instruct';
+                    body.model = requestedModel;
+                }
+
                 allowed = projKeys.map((k: any) => ({
                     upstream_key_id: k.id,
                     model_name: requestedModel,
