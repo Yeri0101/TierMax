@@ -284,7 +284,14 @@ v1.post('/chat/completions', async (c) => {
         } catch (_) {}
 
         // --- Virtual Multi-Model Fusion Endpoint ---
-        if (requestedModel === 'fusion' || requestedModel === 'openclaw/fusion' || requestedModel.startsWith('fusion:') || requestedModel.startsWith('openclaw/fusion:')) {
+        const isFusionModel = requestedModel === 'fusion' ||
+            requestedModel === 'openclaw/fusion' ||
+            requestedModel.endsWith('/fusion') ||
+            requestedModel.startsWith('fusion:') ||
+            requestedModel.startsWith('openclaw/fusion:') ||
+            requestedModel.includes('/fusion:');
+
+        if (isFusionModel) {
             if (body.stream) {
                 c.header('Content-Type', 'text/event-stream');
                 c.header('Cache-Control', 'no-cache');
@@ -356,7 +363,14 @@ v1.post('/messages', async (c) => {
         const requestedModel = anthropicBody.model || '';
 
         // 1. Virtual Multi-Model Fusion via Anthropic wire format
-        if (requestedModel === 'fusion' || requestedModel === 'openclaw/fusion' || requestedModel.startsWith('fusion:') || requestedModel.startsWith('openclaw/fusion:')) {
+        const isFusionModel = requestedModel === 'fusion' ||
+            requestedModel === 'openclaw/fusion' ||
+            requestedModel.endsWith('/fusion') ||
+            requestedModel.startsWith('fusion:') ||
+            requestedModel.startsWith('openclaw/fusion:') ||
+            requestedModel.includes('/fusion:');
+
+        if (isFusionModel) {
             const openAIBody = anthropicToOpenAI(anthropicBody);
 
             if (anthropicBody.stream) {
