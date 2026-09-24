@@ -186,7 +186,7 @@ export default function EngineSettings() {
                 ? config.fusionDefaultJudge
                 : (config.fusionDefaultModels?.[slotIndex] || '');
 
-            if (!currentVal) {
+            if (!currentVal || !models.includes(currentVal)) {
                 const preferred = models.find((m: string) =>
                     m.includes('flash') || m.includes('mini') || m.includes('chat') || m.includes('versatile')
                 ) || models[0];
@@ -290,9 +290,9 @@ export default function EngineSettings() {
                     normalized.forEach((src: string) => {
                         if (src) fetchModelsForKey(src);
                     });
-                }
-
-                if (data.fusionDefaultModels || data.fusionDefaultJudge) {
+                    const initialManual = normalized.map((k: string) => !k);
+                    setFusionSlotManual(initialManual);
+                } else {
                     setFusionSlotManual([true, true, true, true]);
                 }
             }
@@ -359,6 +359,7 @@ export default function EngineSettings() {
         try {
             const payload: any = {
                 ...config,
+                fusionSlotProjects: fusionSlotKeys,
             };
             if (typesafeKeyInput && !typesafeKeyInput.includes('••••') && !typesafeKeyInput.includes('...')) {
                 payload.typesafeApiKey = typesafeKeyInput.trim();
@@ -377,6 +378,9 @@ export default function EngineSettings() {
             if (res.success) {
                 if (res.config) {
                     setConfig(prev => ({ ...prev, ...res.config }));
+                    if (res.config.fusionSlotProjects && Array.isArray(res.config.fusionSlotProjects)) {
+                        setFusionSlotKeys(res.config.fusionSlotProjects);
+                    }
                 }
                 setSaveSuccess(t('engine.saved_success') || 'Engine configurations saved successfully!');
                 setTimeout(() => setSaveSuccess(''), 4000);
@@ -787,6 +791,7 @@ export default function EngineSettings() {
                                     type="text"
                                     value={config.managerModel || ''}
                                     onChange={e => setConfig(c => ({ ...c, managerModel: e.target.value }))}
+                                    onKeyDown={e => { if (e.key === 'Enter') handleSave(); }}
                                     placeholder="ej. gemini-2.5-flash o llama-3.3-70b-versatile"
                                     style={{ width: '100%', padding: '0.5rem 0.75rem', fontSize: '0.85rem' }}
                                 />
@@ -891,19 +896,18 @@ export default function EngineSettings() {
                         </div>
                     </div>
 
-                    <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', alignItems: 'center' }}>
                         <button
                             type="button"
                             onClick={() => {
-                                setConfig({
-                                    ...config,
+                                setConfig(prev => ({
+                                    ...prev,
                                     fusionDefaultModels: ['deepseek-chat', 'qwen/qwen3.8-27b', 'meta/llama-3.3-70b-instruct'],
                                     fusionDefaultJudge: 'deepseek-chat'
-                                });
-                                setFusionSlotManual([true, true, true, true]);
+                                }));
                             }}
                             className="btn btn-secondary btn-sm"
-                            style={{ fontSize: '0.72rem', padding: '0.2rem 0.5rem' }}
+                            style={{ fontSize: '0.72rem', padding: '0.25rem 0.5rem' }}
                             title="Terna de alto razonamiento lógico y código"
                         >
                             🧠 Reasoning Trio
@@ -911,15 +915,14 @@ export default function EngineSettings() {
                         <button
                             type="button"
                             onClick={() => {
-                                setConfig({
-                                    ...config,
+                                setConfig(prev => ({
+                                    ...prev,
                                     fusionDefaultModels: ['gemini-2.5-flash', 'qwen/qwen3.8-27b', 'llama-3.3-70b-versatile'],
                                     fusionDefaultJudge: 'gemini-2.5-flash'
-                                });
-                                setFusionSlotManual([true, true, true, true]);
+                                }));
                             }}
                             className="btn btn-secondary btn-sm"
-                            style={{ fontSize: '0.72rem', padding: '0.2rem 0.5rem' }}
+                            style={{ fontSize: '0.72rem', padding: '0.25rem 0.5rem' }}
                             title="Terna de alta velocidad para capas gratuitas"
                         >
                             ⚡ Speed & Free
@@ -927,21 +930,57 @@ export default function EngineSettings() {
                         <button
                             type="button"
                             onClick={() => {
-                                setConfig({
-                                    ...config,
+                                setConfig(prev => ({
+                                    ...prev,
                                     fusionDefaultModels: ['deepseek-chat', 'moonshotai/kimi-k3', 'minimaxai/minimax-m3'],
                                     fusionDefaultJudge: 'deepseek-chat'
-                                });
-                                setFusionSlotManual([true, true, true, true]);
+                                }));
                             }}
                             className="btn btn-secondary btn-sm"
-                            style={{ fontSize: '0.72rem', padding: '0.2rem 0.5rem' }}
+                            style={{ fontSize: '0.72rem', padding: '0.25rem 0.5rem' }}
                             title="Terna multi-proveedor asiático de frontera"
                         >
                             🌐 Frontier Mix
                         </button>
+
+                        <button
+                            type="button"
+                            onClick={() => handleSave()}
+                            disabled={saving}
+                            className="btn btn-primary btn-sm"
+                            style={{
+                                fontSize: '0.75rem',
+                                padding: '0.35rem 0.85rem',
+                                fontWeight: 700,
+                                gap: '0.4rem',
+                                background: '#8b5cf6',
+                                borderColor: '#7c3aed'
+                            }}
+                            title="Guardar cambios de la terna Fusion y Motores"
+                        >
+                            {saving ? <RefreshCw size={13} className="spin" /> : <Save size={13} />}
+                            <span>{t('engine.save_config')}</span>
+                        </button>
                     </div>
                 </div>
+
+                {saveSuccess && (
+                    <div style={{
+                        padding: '0.45rem 0.75rem',
+                        borderRadius: 6,
+                        background: 'rgba(34,197,94,0.12)',
+                        border: '1px solid rgba(34,197,94,0.25)',
+                        color: '#22c55e',
+                        fontSize: '0.78rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.4rem',
+                        fontWeight: 600
+                    }}>
+                        <Check size={14} />
+                        <span>{saveSuccess}</span>
+                    </div>
+                )}
 
                 <div style={{
                     display: 'flex',
@@ -1045,43 +1084,41 @@ export default function EngineSettings() {
                                     </button>
                                 </div>
 
-                                {/* Project / Channel selector (shown when not in manual mode) */}
-                                {!isManual && (
-                                    <div className="form-group" style={{ margin: 0 }}>
-                                        <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.2rem' }}>
-                                            {t('engine.channel_label') || 'Proyecto / Canal'}:
-                                        </span>
-                                        <select
-                                            value={selectedKey}
-                                            onChange={e => handleFusionSlotKeyChange(i, e.target.value)}
-                                            style={{ width: '100%', padding: '0.38rem 0.5rem', fontSize: '0.78rem' }}
-                                        >
-                                            <option value="">-- {t('engine.source_projects_pool') || 'Seleccionar Canal / Pool'} --</option>
-                                            <optgroup label={`📂 ${t('engine.source_projects_pool') || 'Proyectos (Pool con Rotación Automática)'}`}>
-                                                {projects.map((proj: any) => {
-                                                    const projKeys = upstreamKeys.filter((k: any) => k.project_id === proj.id);
-                                                    if (projKeys.length === 0) return null;
-                                                    const prov = projKeys[0]?.provider?.toUpperCase() || 'CANAL';
-                                                    return (
-                                                        <option key={`fproj:${proj.id}`} value={`project:${proj.id}`}>
-                                                            📂 {proj.name} · {prov} ({projKeys.length} {projKeys.length === 1 ? 'llave' : 'llaves con rotación'})
-                                                        </option>
-                                                    );
-                                                })}
-                                            </optgroup>
-                                            <optgroup label={`🔑 ${t('engine.source_individual_keys') || 'Llaves Individuales (Fijas sin rotación)'}`}>
-                                                {projects.map((proj: any) => {
-                                                    const projKeys = upstreamKeys.filter((k: any) => k.project_id === proj.id);
-                                                    return projKeys.map((k: any, idx: number) => (
-                                                        <option key={`fkey:${k.id}`} value={`key:${k.id}`}>
-                                                            ↳ {proj.name} · {k.provider.toUpperCase()} #{idx + 1} ({k.key_preview || 'Llave'})
-                                                        </option>
-                                                    ));
-                                                })}
-                                            </optgroup>
-                                        </select>
-                                    </div>
-                                )}
+                                {/* Project / Channel selector (ALWAYS visible) */}
+                                <div className="form-group" style={{ margin: 0 }}>
+                                    <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.2rem' }}>
+                                        {t('engine.channel_label') || 'Proyecto / Canal'}:
+                                    </span>
+                                    <select
+                                        value={selectedKey}
+                                        onChange={e => handleFusionSlotKeyChange(i, e.target.value)}
+                                        style={{ width: '100%', padding: '0.38rem 0.5rem', fontSize: '0.78rem' }}
+                                    >
+                                        <option value="">-- {t('engine.source_projects_pool') || 'Seleccionar Canal / Pool'} --</option>
+                                        <optgroup label={`📂 ${t('engine.source_projects_pool') || 'Proyectos (Pool con Rotación Automática)'}`}>
+                                            {projects.map((proj: any) => {
+                                                const projKeys = upstreamKeys.filter((k: any) => k.project_id === proj.id);
+                                                if (projKeys.length === 0) return null;
+                                                const prov = projKeys[0]?.provider?.toUpperCase() || 'CANAL';
+                                                return (
+                                                    <option key={`fproj:${proj.id}`} value={`project:${proj.id}`}>
+                                                        📂 {proj.name} · {prov} ({projKeys.length} {projKeys.length === 1 ? 'llave' : 'llaves con rotación'})
+                                                    </option>
+                                                );
+                                            })}
+                                        </optgroup>
+                                        <optgroup label={`🔑 ${t('engine.source_individual_keys') || 'Llaves Individuales (Fijas sin rotación)'}`}>
+                                            {projects.map((proj: any) => {
+                                                const projKeys = upstreamKeys.filter((k: any) => k.project_id === proj.id);
+                                                return projKeys.map((k: any, idx: number) => (
+                                                    <option key={`fkey:${k.id}`} value={`key:${k.id}`}>
+                                                        ↳ {proj.name} · {k.provider.toUpperCase()} #{idx + 1} ({k.key_preview || 'Llave'})
+                                                    </option>
+                                                ));
+                                            })}
+                                        </optgroup>
+                                    </select>
+                                </div>
 
                                 {/* Model Selector or Input */}
                                 <div className="form-group" style={{ margin: 0 }}>
@@ -1127,6 +1164,7 @@ export default function EngineSettings() {
                                             type="text"
                                             value={currentModel}
                                             onChange={e => handleFusionModelSelect(i, e.target.value)}
+                                            onKeyDown={e => { if (e.key === 'Enter') handleSave(); }}
                                             placeholder={slot.placeholder}
                                             style={{
                                                 width: '100%', padding: '0.38rem 0.5rem', fontSize: '0.8rem',
@@ -1202,6 +1240,44 @@ export default function EngineSettings() {
                     )}
                 </div>
             )}
+
+            {/* Sticky Floating Save Bar for frictionless ergonomics */}
+            <div style={{
+                position: 'fixed',
+                bottom: '1.5rem',
+                right: '2rem',
+                zIndex: 99,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+                background: 'rgba(23, 23, 23, 0.94)',
+                backdropFilter: 'blur(12px)',
+                padding: '0.55rem 0.95rem',
+                borderRadius: 12,
+                border: '1px solid var(--border-subtle)',
+                boxShadow: '0 8px 30px rgba(0,0,0,0.5)'
+            }}>
+                {saveSuccess ? (
+                    <span style={{ fontSize: '0.78rem', color: '#22c55e', display: 'flex', alignItems: 'center', gap: '0.35rem', fontWeight: 600 }}>
+                        <Check size={14} />
+                        {saveSuccess}
+                    </span>
+                ) : (
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        TierMax Engine
+                    </span>
+                )}
+                <button
+                    type="button"
+                    onClick={() => handleSave()}
+                    disabled={saving}
+                    className="btn btn-primary"
+                    style={{ padding: '0.45rem 1.15rem', fontWeight: 700, gap: '0.45rem', fontSize: '0.8rem' }}
+                >
+                    {saving ? <RefreshCw size={13} className="spin" /> : <Save size={13} />}
+                    <span>{t('engine.save_config')}</span>
+                </button>
+            </div>
         </div>
     );
 }
