@@ -113,7 +113,12 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   const [passwordError, setPasswordError] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
   const [passwordLoading, setPasswordLoading] = useState(false);
+  const [dbMode, setDbMode] = useState<{ is_local: boolean; db_type: string } | null>(null);
   const isLoggedIn = !!localStorage.getItem('token');
+
+  useEffect(() => {
+    fetchApi('/system/info').then(data => setDbMode(data)).catch(() => {});
+  }, []);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -179,6 +184,18 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 5px #22c55e', animation: 'pulseGlow 2s infinite' }} />
               LIVE
             </div>
+            {dbMode && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '0.35rem',
+                background: dbMode.is_local ? 'rgba(56,189,248,0.08)' : 'rgba(168,85,247,0.08)',
+                border: `1px solid ${dbMode.is_local ? 'rgba(56,189,248,0.25)' : 'rgba(168,85,247,0.25)'}`,
+                borderRadius: 'var(--radius-pill)', padding: '0.2rem 0.6rem',
+                fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.04em',
+                color: dbMode.is_local ? '#38bdf8' : '#a855f7',
+              }}>
+                <span>{dbMode.is_local ? '💾 SQLite Local' : '☁️ Supabase'}</span>
+              </div>
+            )}
           </div>
         )}
 

@@ -184,7 +184,7 @@ channelTesting.post('/test-project/:projectId', async (c) => {
     if (error) return c.json({ error: error.message }, 500);
     if (!keys || keys.length === 0) return c.json({ results: [], count: 0 });
 
-    const results = await Promise.all(keys.map(k => runKeyPing(k)));
+    const results = await Promise.all((keys || []).map((k: any) => runKeyPing(k)));
     return c.json({
         projectId,
         count: results.length,

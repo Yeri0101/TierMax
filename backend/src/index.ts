@@ -8,7 +8,10 @@ import * as dns from 'node:dns';
 // Fix for Node.js fetch() timeout on Windows with Google APIs IPv6 
 dns.setDefaultResultOrder('ipv4first');
 
-import { supabase } from './db';
+import { supabase, dbType, isLocalDb } from './db';
+import { serveStatic } from '@hono/node-server/serve-static';
+import * as fs from 'fs';
+import * as path from 'path';
 
 import projectsRoute from './routes/projects';
 import upstreamKeysRoute from './routes/upstreamKeys';
@@ -44,9 +47,18 @@ app.get('/', (c) => {
     return c.json({ message: 'OpenClaw API Gateway Running' });
 });
 
+app.get('/api/system/info', (c) => {
+    return c.json({
+        status: 'ok',
+        db_type: dbType,
+        is_local: isLocalDb,
+        version: '2.5.0',
+    });
+});
+
 // ── Public health + metrics endpoint (no auth required) ─────────────────────
 // Consumed by Mission Control /infra page for passive observability.
-// All data comes from the existing `request_logs` table in Supabase.
+// All data comes from the existing `request_logs` table in Supabase/SQLite.
 const GATEWAY_START = Date.now();
 app.get('/health', async (c) => {
     const since24h  = new Date(Date.now() - 86_400_000).toISOString();
@@ -144,6 +156,8 @@ app.get('/health', async (c) => {
             ts:                r.created_at ?? r.inserted_at ?? null,
         })),
         ts: Date.now(),
+        db_type: dbType,
+        is_local: isLocalDb,
     });
 });
 
@@ -208,6 +222,24 @@ app.put('/api/auth/credentials', async (c) => {
 
     return c.json({ success: true, newUsername: newUsername || currentUsername });
 });
+
+// Static frontend serving if built dist exists (production / Docker mode)
+const possibleDist = [
+    path.resolve(process.cwd(), '../frontend/dist'),
+    path.resolve(process.cwd(), './frontend/dist'),
+    path.resolve(process.cwd(), './frontend_dist'),
+    path.resolve(process.cwd(), './public'),
+];
+const distPath = possibleDist.find(p => fs.existsSync(p) && fs.existsSync(path.join(p, 'index.html')));
+
+if (distPath) {
+    console.log(`[TierMax] Serving static frontend dashboard from: ${distPath}`);
+    app.use('/*', serveStatic({ root: path.relative(process.cwd(), distPath) }));
+    app.get('*', (c) => {
+        const indexPath = path.join(distPath, 'index.html');
+        return c.html(fs.readFileSync(indexPath, 'utf-8'));
+    });
+}
 
 const port = parseInt(process.env.PORT || '3000');
 console.log(`Server is running on port ${port}`);

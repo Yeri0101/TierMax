@@ -70,7 +70,7 @@ projects.post('/:id/pause-all', async (c) => {
     const { data: keys, error } = await supabase.from('upstream_keys').select('id').eq('project_id', id);
     if (error) return c.json({ error: error.message }, 500);
 
-    keys.forEach(k => pauseProvider(k.id));
+    (keys || []).forEach((k: any) => pauseProvider(k.id));
     return c.json({ success: true, count: keys.length });
 });
 

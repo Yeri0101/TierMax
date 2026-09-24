@@ -20,6 +20,13 @@ backend/.project_model_history.json
 .guardian_limits.json
 backend/.guardian_limits.json
 
+# Local SQLite database files
+data/
+backend/data/
+*.db
+*.db-journal
+*.sqlite
+
 # Local submodules / audit folders
 audit-last30days-skill/
 openclaw-gateway-audit/

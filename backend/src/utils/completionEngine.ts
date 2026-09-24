@@ -185,7 +185,7 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
             .select('id, provider')
             .eq('project_id', gatewayKey.project_id);
 
-        const projectProviders = (projectKeys || []).map(k => ({ id: k.id, provider: k.provider }));
+        const projectProviders = (projectKeys || []).map((k: any) => ({ id: k.id, provider: k.provider }));
 
         const { data: allKeyModels } = await supabase
             .from('gateway_keys')
@@ -217,7 +217,7 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
             // Re-bind allowed models using healed model
             allowed = allowedModels.filter((m: any) => m.model_name === requestedModel);
             if (allowed.length === 0 && projectKeys && projectKeys.length > 0) {
-                allowed = projectKeys.map(k => ({
+                allowed = projectKeys.map((k: any) => ({
                     upstream_key_id: k.id,
                     model_name: requestedModel,
                     upstream_model_name: null,
@@ -227,17 +227,17 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
             // Heuristic matching for specific families if not explicitly healed
             let matchingKeys: any[] = [];
             if (requestedModel.includes('deepseek')) {
-                matchingKeys = projectKeys.filter(k => k.provider === 'deepseek' || k.provider === 'groq' || k.provider === 'openrouter');
+                matchingKeys = projectKeys.filter((k: any) => k.provider === 'deepseek' || k.provider === 'groq' || k.provider === 'openrouter');
             } else if (requestedModel.includes('qwen')) {
-                matchingKeys = projectKeys.filter(k => k.provider === 'groq' || k.provider === 'cerebras' || k.provider === 'openrouter');
+                matchingKeys = projectKeys.filter((k: any) => k.provider === 'groq' || k.provider === 'cerebras' || k.provider === 'openrouter');
             } else if (requestedModel.includes('kimi') || requestedModel.includes('moonshot')) {
-                matchingKeys = projectKeys.filter(k => k.provider === 'nvidia' || k.provider === 'moonshot' || k.provider === 'openrouter');
+                matchingKeys = projectKeys.filter((k: any) => k.provider === 'nvidia' || k.provider === 'moonshot' || k.provider === 'openrouter');
             } else if (requestedModel.includes('minimax')) {
-                matchingKeys = projectKeys.filter(k => k.provider === 'nvidia' || k.provider === 'minimax' || k.provider === 'openrouter');
+                matchingKeys = projectKeys.filter((k: any) => k.provider === 'nvidia' || k.provider === 'minimax' || k.provider === 'openrouter');
             }
 
             if (matchingKeys.length > 0) {
-                allowed = matchingKeys.map(k => ({
+                allowed = matchingKeys.map((k: any) => ({
                     upstream_key_id: k.id,
                     model_name: requestedModel,
                     upstream_model_name: null,

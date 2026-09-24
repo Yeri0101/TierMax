@@ -68,7 +68,7 @@ analytics.get('/:projectId', async (c) => {
     const providerUsage: Record<string, number> = {};
     const modelUsage: Record<string, number> = {};
 
-    allLogs.forEach(log => {
+    (allLogs || []).forEach((log: any) => {
         totalRequests++;
         if (log.status_code >= 200 && log.status_code < 300) {
             successfulRequests++;

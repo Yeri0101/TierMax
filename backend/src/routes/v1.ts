@@ -534,7 +534,7 @@ v1.get('/brave/search', async (c) => {
         }
 
         // Filter healthy keys
-        const healthyKeys = keys.filter(k => {
+        const healthyKeys = (keys || []).filter((k: any) => {
             const st = providerStates[k.id];
             return !st || st.status === 'healthy';
         });
@@ -631,7 +631,7 @@ v1.get('/brave/local/pois', async (c) => {
 
         if (error || !keys || keys.length === 0) return c.json({ error: "No Brave Search keys configured" }, 404);
 
-        const healthyKeys = keys.filter(k => !providerStates[k.id] || providerStates[k.id].status === 'healthy');
+        const healthyKeys = (keys || []).filter((k: any) => !providerStates[k.id] || providerStates[k.id].status === 'healthy');
         if (healthyKeys.length === 0) return c.json({ error: "All keys exhausted" }, 429);
 
         const projectId = gatewayKey.project_id;
@@ -678,7 +678,7 @@ v1.get('/brave/local/descriptions', async (c) => {
 
         if (error || !keys || keys.length === 0) return c.json({ error: "No Brave Search keys configured" }, 404);
 
-        const healthyKeys = keys.filter(k => !providerStates[k.id] || providerStates[k.id].status === 'healthy');
+        const healthyKeys = (keys || []).filter((k: any) => !providerStates[k.id] || providerStates[k.id].status === 'healthy');
         if (healthyKeys.length === 0) return c.json({ error: "All keys exhausted" }, 429);
 
         const projectId = gatewayKey.project_id;

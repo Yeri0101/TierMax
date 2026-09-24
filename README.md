@@ -119,101 +119,56 @@ free-llm-gateway/
 
 ---
 
-## Setup
+## ⚡ Quickstart Setup (< 1 Minute)
 
-### 1. Clone the repository
+TierMax includes a **Zero-Config Embedded Local Database (SQLite)**. You do **NOT** need Supabase, PostgreSQL, cloud accounts, or external services to start using TierMax.
+
+### Option 1: 1-Click Automated Setup (Recommended)
 
 ```bash
-git clone https://github.com/Yeri0101/free-llm-gateway.git
-cd free-llm-gateway
+git clone https://github.com/Yeri0101/TierMax.git
+cd TierMax
+./quickstart.sh
 ```
 
-### 2. Create the Supabase database
-
-Log in to [supabase.com](https://supabase.com), create a new project, then go to **SQL Editor** and run the following:
-
-```sql
--- Admins: dashboard login accounts
-CREATE TABLE admins (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  username TEXT UNIQUE NOT NULL,
-  password TEXT NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Insert your admin user (change username/password before using in production)
-INSERT INTO admins (username, password) VALUES ('admin', 'changeme');
-
--- Projects: logical groupings for keys and analytics
-CREATE TABLE projects (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name TEXT NOT NULL,
-  color TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Upstream keys: your real API keys for each LLM provider
-CREATE TABLE upstream_keys (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
-  provider TEXT NOT NULL,
-  api_key TEXT NOT NULL,
-  label TEXT,
-  status TEXT DEFAULT 'healthy',
-  last_used TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Gateway keys: what your clients/agents use to authenticate
-CREATE TABLE gateway_keys (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
-  key_name TEXT NOT NULL,
-  api_key TEXT NOT NULL UNIQUE,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Gateway key models: which models/upstreams each gateway key can access
-CREATE TABLE gateway_key_models (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  gateway_key_id UUID REFERENCES gateway_keys(id) ON DELETE CASCADE,
-  upstream_key_id UUID REFERENCES upstream_keys(id) ON DELETE CASCADE,
-  model_name TEXT NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Request logs: analytics per request
-CREATE TABLE request_logs (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
-  gateway_key_id UUID,
-  upstream_key_id UUID,
-  model TEXT,
-  provider TEXT,
-  prompt_tokens INTEGER,
-  completion_tokens INTEGER,
-  total_tokens INTEGER,
-  latency_ms INTEGER,
-  status INTEGER,
-  error TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Batch jobs: async processing queue
-CREATE TABLE batch_jobs (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
-  gateway_key_id UUID,
-  status TEXT DEFAULT 'pending',
-  payload JSONB,
-  result JSONB,
-  error TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
+Or using npm:
+```bash
+npm run setup
+npm run dev
 ```
 
-> ⚠️ The admin password is stored as plain text in this setup. For production use, migrate to bcrypt hashing.
+- **Dashboard UI**: [http://localhost:5173](http://localhost:5173)
+- **OpenAI Gateway API**: [http://localhost:3000/v1](http://localhost:3000/v1)
+- **Default Login**: `admin` / `admin` (changeable in Settings)
+- **Database**: Embedded SQLite stored in `./data/tiermax.db` (auto-migrated and seeded).
+
+---
+
+### Option 2: Docker Compose (1-Command Deployment)
+
+```bash
+docker compose up -d
+```
+
+Starts the complete gateway and web console on port 3000 with persistent data in `./data`.
+
+---
+
+### Option 3: Supabase Cloud (Optional)
+
+If you prefer to use Supabase Cloud instead of local SQLite:
+1. In `backend/.env` (or root `.env`):
+   ```env
+   DB_TYPE=supabase
+   SUPABASE_URL=https://your-project.supabase.co
+   SUPABASE_ANON_KEY=your-anon-key
+   ```
+2. **Instant Cloud-to-Local Migration**:
+   If you have an existing Supabase project and want to migrate everything to Local SQLite to run offline, simply run:
+   ```bash
+   npm run db:pull
+   ```
+   This copies all projects, upstream keys, gateway keys, routing rules, and custom pricing directly into your local SQLite database.
 
 ### 3. Configure the backend
 

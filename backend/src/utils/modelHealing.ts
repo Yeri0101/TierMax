@@ -295,15 +295,15 @@ export async function repairProjectChannels(projectId: string): Promise<{
         .eq('project_id', projectId);
 
     const configuredModelsSet = new Set<string>();
-    (gatewayKeys || []).forEach(gk => {
+    (gatewayKeys || []).forEach((gk: any) => {
         (gk.gateway_key_models || []).forEach((m: any) => {
             if (m.model_name) configuredModelsSet.add(m.model_name);
         });
     });
 
     // 3. Ping each active upstream key concurrently
-    const activeKeys = upstreamKeys.filter(k => k.is_active !== false);
-    const pingPromises = activeKeys.map(key => runKeyPing(key));
+    const activeKeys = (upstreamKeys || []).filter((k: any) => k.is_active !== false);
+    const pingPromises = activeKeys.map((key: any) => runKeyPing(key));
     const pingResults = await Promise.allSettled(pingPromises);
 
     const channelHealth: any[] = [];

@@ -1,0 +1,21 @@
+services:
+  tiermax:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tiermax-gateway
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - DB_TYPE=sqlite
+      - ADMIN_JWT_SECRET=tiermax-production-secret-change-me
+      - DEFAULT_ADMIN_USER=admin
+      - DEFAULT_ADMIN_PASSWORD=admin
+      # Optional: To use Supabase Cloud instead of local SQLite:
+      # - DB_TYPE=supabase
+      # - SUPABASE_URL=https://your-id.supabase.co
+      # - SUPABASE_ANON_KEY=eyJ...
+    volumes:
+      - ./data:/app/backend/data
