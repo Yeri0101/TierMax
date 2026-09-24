@@ -2,7 +2,8 @@ import { stream } from 'hono/streaming';
 import { supabase } from '../db';
 import { providerStates, updateProviderCalls, markProviderError, checkAndRecoverProvider } from './limitTracker';
 import { callPuterAI, callPuterAIStream } from './puterClient';
-import { buildCacheKey, getCached, setCached } from './semanticCache';
+import { buildCacheKey, getCached, setCached, setCachedStream } from './semanticCache';
+import { pruneContext } from './contextPruner';
 import { isProviderSlow, recordLatency, markProviderSlow, LATENCY_ABORT_TIMEOUT_MS } from './latencyGuard';
 import { classifyRequest, filterCandidatesByTier, estimateTokenCount } from './smartRouter';
 import {
@@ -755,8 +756,22 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
         return { ok: false, status: 503, error: errObj.error };
     }
 
-    // --- SOAT: Semantic Cache Check ---
-    const cacheKey = !body.stream ? buildCacheKey(requestedModel, body.messages) : null;
+    // --- Smart Context Pruning for OpenClaw & Agentic Sessions ---
+    if (Array.isArray(body.messages) && body.messages.length > 0) {
+        const pruneResult = pruneContext(body.messages);
+        if (pruneResult.pruned) {
+            body.messages = pruneResult.messages;
+            const ts = new Date().toISOString();
+            console.log(`[${ts}] [ContextPruner] Compressed context ${pruneResult.originalEstimatedTokens} -> ${pruneResult.finalEstimatedTokens} tokens (saved ~${pruneResult.tokensSaved} tokens, ${pruneResult.prunedToolOutputsCount} tool outputs compressed)`);
+            if (c) {
+                c.header('X-OpenClaw-Context-Pruned', 'true');
+                c.header('X-OpenClaw-Tokens-Saved', String(pruneResult.tokensSaved));
+            }
+        }
+    }
+
+    // --- SOAT: Semantic Cache Check (Stream & Non-Stream) ---
+    const cacheKey = buildCacheKey(requestedModel, body.messages, { temperature: body.temperature });
     if (cacheKey) {
         const cached = getCached(cacheKey);
         if (cached) {
@@ -764,9 +779,20 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
             console.log(`[${ts}] [SemanticCache] HIT for model=${requestedModel} key=${cacheKey.substring(0, 12)}…`);
             if (c && !isInternalCall && !returnRawStream) {
                 c.header('X-Cache', 'HIT');
-                return c.json(cached, 200);
+                if (body.stream && cached.isStream && cached.chunks) {
+                    c.header('Content-Type', 'text/event-stream; charset=utf-8');
+                    c.header('Cache-Control', 'no-cache, no-transform');
+                    c.header('Connection', 'keep-alive');
+                    c.header('X-Accel-Buffering', 'no');
+                    return stream(c, async (s) => {
+                        for (const chunk of cached.chunks!) {
+                            await s.write(new TextEncoder().encode(chunk));
+                        }
+                    });
+                }
+                return c.json(cached.value, 200);
             }
-            return { ok: true, data: cached, status: 200, isCacheHit: true };
+            return { ok: true, data: cached.value || cached, status: 200, isCacheHit: true };
         }
     }
 
@@ -1278,12 +1304,20 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
                     return stream(c, async (s) => {
                         const reader = response.body!.getReader();
                         s.onAbort(() => reader.cancel().catch(() => { }));
+                        const chunksToCache: string[] = [];
+                        const textDecoder = new TextDecoder();
 
                         try {
                             while (true) {
                                 const { done, value } = await reader.read();
                                 if (done) break;
-                                await s.write(value);
+                                if (value) {
+                                    chunksToCache.push(textDecoder.decode(value, { stream: true }));
+                                    await s.write(value);
+                                }
+                            }
+                            if (cacheKey && chunksToCache.length > 0) {
+                                setCachedStream(cacheKey, chunksToCache);
                             }
                         } catch (err: any) {
                             try {

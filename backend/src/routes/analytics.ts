@@ -1,10 +1,15 @@
 import { Hono } from 'hono';
 import { supabase } from '../db';
 import { authMiddleware } from '../middleware/auth';
+import { getCacheStats } from '../utils/semanticCache';
 
 const analytics = new Hono();
 
 analytics.use('*', authMiddleware);
+
+analytics.get('/cache-stats', (c) => {
+    return c.json(getCacheStats());
+});
 
 analytics.get('/:projectId', async (c) => {
     const { projectId } = c.req.param();
