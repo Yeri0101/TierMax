@@ -159,66 +159,42 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   return (
     <>
       <nav className="navbar">
-        {/* Brand */}
-        <Link to="/" className="navbar-brand">
-          <div className="navbar-logo" style={{ background: 'transparent', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <TierMaxLogo size={30} />
-          </div>
-          <div>
-            <div className="navbar-title" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              TierMax
-              <span style={{
-                fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.06em',
-                background: 'rgba(139,92,246,0.15)', border: '1px solid rgba(139,92,246,0.35)',
-                color: '#a78bfa', borderRadius: '4px',
-                padding: '0.05rem 0.35rem', lineHeight: 1.4,
-              }}>v2.5 · Fusion & Anthropic</span>
+        {/* Left: Brand + Status chips (LIVE, Supabase/SQLite, TenantSwitcher) */}
+        <div className="navbar-left">
+          <Link to="/" className="navbar-brand">
+            <div className="navbar-logo" style={{ background: 'transparent', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <TierMaxLogo size={30} />
             </div>
-            <div className="navbar-subtitle">Universal AI Gateway · SOAT</div>
-          </div>
-        </Link>
-
-        {/* Center status chips */}
-        {isLoggedIn && (
-          <div className="navbar-status flex items-center gap-2">
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: '0.3rem',
-              background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)',
-              borderRadius: 'var(--radius-pill)', padding: '0.2rem 0.6rem',
-              fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.06em', color: '#22c55e',
-            }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 5px #22c55e', animation: 'pulseGlow 2s infinite' }} />
-              LIVE
-            </div>
-            {dbMode && (
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: '0.35rem',
-                background: dbMode.is_local ? 'rgba(56,189,248,0.08)' : 'rgba(168,85,247,0.08)',
-                border: `1px solid ${dbMode.is_local ? 'rgba(56,189,248,0.25)' : 'rgba(168,85,247,0.25)'}`,
-                borderRadius: 'var(--radius-pill)', padding: '0.2rem 0.6rem',
-                fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.04em',
-                color: dbMode.is_local ? '#38bdf8' : '#a855f7',
-              }}>
-                <span>{dbMode.is_local ? '💾 SQLite Local' : '☁️ Supabase'}</span>
+            <div>
+              <div className="navbar-title" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                TierMax
+                <span className="navbar-version-badge">v2.5 · Fusion & Anthropic</span>
               </div>
-            )}
-            <TenantSwitcher />
-          </div>
-        )}
+              <div className="navbar-subtitle">Universal AI Gateway · SOAT</div>
+            </div>
+          </Link>
+
+          {/* Left-aligned status chips */}
+          {isLoggedIn && (
+            <div className="navbar-status">
+              <div className="navbar-live-chip">
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 5px #22c55e', animation: 'pulseGlow 2s infinite' }} />
+                LIVE
+              </div>
+              {dbMode && (
+                <div className={`navbar-db-chip ${dbMode.is_local ? 'sqlite' : 'supabase'}`}>
+                  <span>{dbMode.is_local ? '💾 SQLite Local' : '☁️ Supabase'}</span>
+                </div>
+              )}
+              <TenantSwitcher />
+            </div>
+          )}
+        </div>
 
         {/* Right actions */}
         <div className="navbar-right">
           {isLoggedIn && (
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.3rem',
-              background: 'var(--surface-card)',
-              padding: '0.2rem',
-              borderRadius: 'var(--radius-pill)',
-              border: '1px solid var(--border-subtle)',
-              marginRight: '0.35rem',
-            }}>
+            <div className="navbar-nav-links">
               <Link
                 to="/"
                 className={`btn btn-sm ${location.pathname === '/' || location.pathname.startsWith('/projects') ? 'btn-primary' : 'btn-ghost'}`}
@@ -226,7 +202,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 title={t('nav.projects')}
               >
                 <LayoutDashboard size={13} />
-                <span>{t('nav.projects')}</span>
+                <span className="nav-link-text">{t('nav.projects')}</span>
               </Link>
               <Link
                 to="/playground"
@@ -235,7 +211,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 title={t('nav.playground')}
               >
                 <CyberTerminalGlyph size={13} />
-                <span>{t('nav.playground')}</span>
+                <span className="nav-link-text">{t('nav.playground')}</span>
               </Link>
               <Link
                 to="/engine"
@@ -244,7 +220,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 title={t('nav.engine')}
               >
                 <DualEngineGlyph size={13} />
-                <span>{t('nav.engine')}</span>
+                <span className="nav-link-text">{t('nav.engine')}</span>
               </Link>
               <Link
                 to="/audit"
@@ -253,29 +229,18 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 title={t('nav.audit')}
               >
                 <ShieldCheck size={13} />
-                <span>{t('nav.audit')}</span>
+                <span className="nav-link-text">{t('nav.audit')}</span>
               </Link>
             </div>
           )}
 
           <button
             onClick={() => setShowWelcomeModal(true)}
-            className="btn btn-secondary"
+            className="btn btn-secondary navbar-how-to-start-btn"
             title={t('nav.how_to_start')}
-            style={{
-              padding: '0.4rem 0.75rem',
-              gap: '0.35rem',
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              display: 'flex',
-              alignItems: 'center',
-              border: '1px solid rgba(56, 189, 248, 0.35)',
-              background: 'rgba(56, 189, 248, 0.08)',
-              color: '#38bdf8'
-            }}
           >
-            <Server size={13} />
-            <span>{t('nav.how_to_start')}</span>
+            <Server size={13} style={{ flexShrink: 0 }} />
+            <span className="btn-text">{t('nav.how_to_start')}</span>
           </button>
 
           <button
