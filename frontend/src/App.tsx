@@ -1,16 +1,16 @@
 import { useState, useEffect, useContext, createContext, Component } from 'react';
 import type { ReactNode } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { Globe, KeyRound, LogOut, Sun, Moon, LayoutDashboard, ShieldCheck, Server } from 'lucide-react';
+import { KeyRound, Sun, Moon, LayoutDashboard, ShieldCheck } from 'lucide-react';
 import { TierMaxLogo, CyberTerminalGlyph, DualEngineGlyph } from './components/Icons';
 import { WelcomeServerModal } from './components/WelcomeServerModal';
+import { NavbarSettingsMenu } from './components/NavbarSettingsMenu';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import ProjectDetail from './pages/ProjectDetail';
 import Playground from './pages/Playground';
 import EngineSettings from './pages/EngineSettings';
 import AuditLogs from './pages/AuditLogs';
-import { TenantSwitcher } from './components/aaa/TenantSwitcher';
 import { LanguageProvider, useLanguage } from './i18n';
 import { ToastProvider } from './ToastContext';
 import { fetchApi } from './api';
@@ -174,19 +174,11 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
             </div>
           </Link>
 
-          {/* Left-aligned status chips */}
+          {/* Left-aligned subtle LIVE pulse */}
           {isLoggedIn && (
-            <div className="navbar-status">
-              <div className="navbar-live-chip">
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 5px #22c55e', animation: 'pulseGlow 2s infinite' }} />
-                LIVE
-              </div>
-              {dbMode && (
-                <div className={`navbar-db-chip ${dbMode.is_local ? 'sqlite' : 'supabase'}`}>
-                  <span>{dbMode.is_local ? '💾 SQLite Local' : '☁️ Supabase'}</span>
-                </div>
-              )}
-              <TenantSwitcher />
+            <div className="navbar-live-chip" title="Gateway Engine Online">
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 5px #22c55e', animation: 'pulseGlow 2s infinite' }} />
+              LIVE
             </div>
           )}
         </div>
@@ -234,23 +226,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
             </div>
           )}
 
-          <button
-            onClick={() => setShowWelcomeModal(true)}
-            className="btn btn-secondary navbar-how-to-start-btn"
-            title={t('nav.how_to_start')}
-          >
-            <Server size={13} style={{ flexShrink: 0 }} />
-            <span className="btn-text">{t('nav.how_to_start')}</span>
-          </button>
-
-          <button
-            onClick={toggleLanguage}
-            className="btn btn-secondary"
-            style={{ padding: '0.4rem 0.7rem', gap: '0.3rem', fontSize: '0.75rem', fontFamily: 'var(--font-mono)', fontWeight: 700 }}
-          >
-            <Globe size={13} /> {language.toUpperCase()}
-          </button>
-
+          {/* Quick theme toggle */}
           <button
             onClick={toggleTheme}
             className="btn btn-secondary btn-icon"
@@ -285,25 +261,18 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
             </span>
           </button>
 
-          {isLoggedIn && (
-            <>
-              <button
-                onClick={() => setShowPasswordModal(true)}
-                className="btn btn-secondary btn-icon"
-                title={t('nav.change_password')}
-              >
-                <KeyRound size={15} />
-              </button>
-
-              <button
-                onClick={handleLogout}
-                className="btn btn-danger btn-icon"
-                title={t('nav.logout')}
-              >
-                <LogOut size={15} />
-              </button>
-            </>
-          )}
+          {/* Unified Settings Dropdown: Groups Server Guide, Language, Theme, Password, Logout, Tenant & DB info */}
+          <NavbarSettingsMenu
+            dbMode={dbMode}
+            onOpenWelcomeModal={() => setShowWelcomeModal(true)}
+            onOpenPasswordModal={() => setShowPasswordModal(true)}
+            onLogout={handleLogout}
+            theme={theme}
+            toggleTheme={toggleTheme}
+            language={language}
+            toggleLanguage={toggleLanguage}
+            username={localStorage.getItem('user') || 'Admin'}
+          />
         </div>
       </nav>
 
