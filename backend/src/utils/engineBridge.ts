@@ -58,8 +58,8 @@ const DEFAULT_ENGINE_CONFIG: EngineConfig = {
     managerProjectId: '',
     managerUpstreamKeyId: '',
 
-    fusionDefaultModels: ['deepseek-chat', 'qwen/qwen3.8-27b', 'moonshotai/kimi-k3'],
-    fusionDefaultJudge: 'deepseek-chat',
+    fusionDefaultModels: ['mimo-v2.6-flash', 'google/gemini-3.8-flash', 'deepseek-v4-flash'],
+    fusionDefaultJudge: 'mimo-v2.6-flash',
     fusionSlotProjects: ['', '', '', ''],
 };
 

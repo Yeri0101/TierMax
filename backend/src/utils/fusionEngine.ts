@@ -35,13 +35,19 @@ import { getEngineConfig } from './engineBridge';
  * Default fast & diverse panel candidates in TierMax
  */
 const DEFAULT_FUSION_PANEL = [
+    'mimo-v2.6-flash',
+    'google/gemini-3.8-flash',
+    'deepseek-v4-flash',
+    'mimo-v2.6-pro',
+    'deepseek-v4-pro',
+    'moonshotai/kimi-k3',
+    'glm-5.3-flash',
+    'openai/gpt-6-luna',
     'deepseek-chat',
     'qwen/qwen3.8-27b',
-    'moonshotai/kimi-k3',
     'minimaxai/minimax-m3',
     'meta/llama-3.3-70b-instruct',
     'llama-3.3-70b-versatile',
-    'google/gemma-4-31b-it',
     'gemini-2.5-flash',
 ];
 

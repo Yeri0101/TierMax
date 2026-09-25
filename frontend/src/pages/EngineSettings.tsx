@@ -42,16 +42,18 @@ const PROVIDER_BASE_URLS: Record<string, string> = {
 
 const PROVIDER_MODELS_FALLBACK: Record<string, string[]> = {
     mimo: ['mimo-v2.6-flash', 'mimo-v2.6-pro', 'xiaomi/mimo-v2.6-pro', 'mimo-v2-flash', 'mimo-v2-pro'],
-    deepseek: ['deepseek-chat', 'deepseek-reasoner', 'deepseek-coder', 'deepseek-v4-flash', 'deepseek-v4-pro'],
+    deepseek: ['deepseek-chat', 'deepseek-reasoner', 'deepseek-coder', 'deepseek-v4-flash', 'deepseek-v4-pro', 'deepseek/deepseek-v4-flash', 'deepseek/deepseek-v4-pro'],
     groq: ['qwen/qwen3.8-27b', 'deepseek-r1-distill-llama-70b', 'llama-3.3-70b-versatile', 'qwen/qwen3.6-27b', 'openai/gpt-oss-120b', 'whisper-large-v3'],
-    openai: ['gpt-4o', 'gpt-4o-mini', 'o1', 'o3-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
-    google: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'],
+    openai: ['gpt-6-luna', 'openai/gpt-6-luna', 'gpt-4o', 'gpt-4o-mini', 'o1', 'o3-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
+    google: ['gemini-3.8-flash', 'google/gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'],
     vertex: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-pro'],
     vertexai: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-pro'],
     nvidia: ['moonshotai/kimi-k3', 'minimaxai/minimax-m3', 'meta/llama-3.3-70b-instruct', 'deepseek-ai/deepseek-v4-flash-0731', 'google/gemma-4-31b-it', 'moonshotai/kimi-k2.6'],
     mistral: ['mistral-large-latest', 'mistral-medium-latest', 'mistral-small-latest', 'codestral-latest', 'open-mistral-nemo'],
     cerebras: ['llama-3.3-70b', 'llama-3.1-8b', 'llama3.3-70b', 'llama3.1-8b'],
-    openrouter: ['openrouter/auto', 'deepseek/deepseek-chat', 'deepseek/deepseek-r1', 'anthropic/claude-3.5-sonnet', 'meta-llama/llama-3.3-70b-instruct'],
+    openrouter: ['openrouter/auto', 'google/gemini-3.8-flash', 'google/gemini-2.5-flash', 'deepseek/deepseek-v4-flash', 'deepseek/deepseek-v4-pro', 'moonshotai/kimi-k3', 'glm-5.3-flash', 'zhipu/glm-5.3-flash', 'openai/gpt-6-luna', 'gpt-6-luna', 'deepseek/deepseek-chat', 'deepseek/deepseek-r1', 'anthropic/claude-3.5-sonnet', 'meta-llama/llama-3.3-70b-instruct'],
+    zhipu: ['glm-5.3-flash', 'glm-4-plus', 'glm-4-air', 'glm-4-flash'],
+    glm: ['glm-5.3-flash', 'glm-4-plus', 'glm-4-air', 'glm-4-flash'],
     minimax: ['MiniMax-Text-01', 'abab6.5s-chat', 'abab6.5-chat', 'abab6.5g-chat'],
     moonshot: ['moonshot-v1-8k', 'moonshot-v1-32k', 'kimi-latest', 'kimi-thinking-preview'],
     kie: ['gpt-5-2', 'gpt-5-2-pro', 'gemini-2.5-flash', 'claude-3-7-sonnet-20250219', 'deepseek-chat', 'deepseek-reasoner'],
@@ -70,14 +72,14 @@ export default function EngineSettings() {
         enableJevRouting: false,
         typesafeEndpoint: 'https://openrouter.ai/api/alpha/decisions',
         typesafeModel: '~typesafe/jev-latest',
-        managerProvider: 'google',
-        managerModel: 'gemini-2.5-flash',
-        managerBaseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+        managerProvider: 'mimo',
+        managerModel: 'mimo-v2.6-flash',
+        managerBaseUrl: 'https://api.xiaomimimo.com/v1',
         managerTemperature: 0.2,
         managerProjectId: '',
         managerUpstreamKeyId: '',
-        fusionDefaultModels: ['deepseek-chat', 'qwen/qwen3.8-27b', 'moonshotai/kimi-k3'],
-        fusionDefaultJudge: 'deepseek-chat',
+        fusionDefaultModels: ['mimo-v2.6-flash', 'google/gemini-3.8-flash', 'deepseek-v4-flash'],
+        fusionDefaultJudge: 'mimo-v2.6-flash',
         fusionSlotProjects: ['', '', '', ''],
     });
 
@@ -287,12 +289,76 @@ export default function EngineSettings() {
         }
     };
 
+    const handleApplyPreset = async (presetType: 'speed' | 'reasoning' | 'frontier') => {
+        let models: [string, string, string];
+        let judge: string;
+        let preferredProviders: [string, string, string, string];
+
+        if (presetType === 'speed') {
+            // Speed category: flash models: mimo 2.6 flash, gemini 3.8 flash with openrouter provider, deepseek 4 flash
+            models = ['mimo-v2.6-flash', 'google/gemini-3.8-flash', 'deepseek-v4-flash'];
+            judge = 'mimo-v2.6-flash';
+            preferredProviders = ['mimo', 'openrouter', 'deepseek', 'mimo'];
+        } else if (presetType === 'reasoning') {
+            // Pensamiento: mimo 2.6 pro, deepseek 4 pro, gemini 3.8 flash
+            models = ['mimo-v2.6-pro', 'deepseek-v4-pro', 'google/gemini-3.8-flash'];
+            judge = 'deepseek-v4-pro';
+            preferredProviders = ['mimo', 'deepseek', 'google', 'deepseek'];
+        } else {
+            // Frontier tier: kimi k3, glm 5.3 flash, openai gpt 6 luna
+            models = ['moonshotai/kimi-k3', 'glm-5.3-flash', 'openai/gpt-6-luna'];
+            judge = 'openai/gpt-6-luna';
+            preferredProviders = ['openrouter', 'openrouter', 'openrouter', 'openrouter'];
+        }
+
+        const allKeys = upstreamKeysRef.current.length > 0 ? upstreamKeysRef.current : upstreamKeys;
+        const newKeys: string[] = ['', '', '', ''];
+        const newManual: boolean[] = [false, false, false, false];
+
+        for (let i = 0; i < 4; i++) {
+            const targetProv = preferredProviders[i];
+            let matchedProject = projects.find((proj: any) => {
+                const pKeys = allKeys.filter((k: any) => k.project_id === proj.id);
+                return pKeys.some((k: any) => (k.provider || '').toLowerCase() === targetProv);
+            });
+            if (!matchedProject) {
+                matchedProject = projects.find((proj: any) =>
+                    (proj.name || '').toLowerCase().includes(targetProv)
+                );
+            }
+            if (!matchedProject && (targetProv === 'google' || targetProv === 'openai' || targetProv === 'moonshot' || targetProv === 'zhipu')) {
+                matchedProject = projects.find((proj: any) => {
+                    const pKeys = allKeys.filter((k: any) => k.project_id === proj.id);
+                    return pKeys.some((k: any) => (k.provider || '').toLowerCase() === 'openrouter');
+                }) || projects.find((proj: any) => (proj.name || '').toLowerCase().includes('open router') || (proj.name || '').toLowerCase().includes('openrouter'));
+            }
+
+            if (matchedProject) {
+                newKeys[i] = `project:${matchedProject.id}`;
+                newManual[i] = false;
+                fetchModelsForKey(`project:${matchedProject.id}`, allKeys);
+            } else {
+                newKeys[i] = '';
+                newManual[i] = true;
+            }
+        }
+
+        setFusionSlotKeys(newKeys);
+        setFusionSlotManual(newManual);
+        setConfig(prev => ({
+            ...prev,
+            fusionDefaultModels: models,
+            fusionDefaultJudge: judge,
+            fusionSlotProjects: newKeys,
+        }));
+    };
+
     const handleFusionModelSelect = (slotIndex: number, modelName: string) => {
         if (slotIndex === 3) {
             setConfig(prev => ({ ...prev, fusionDefaultJudge: modelName }));
         } else {
             setConfig(prev => {
-                const next = [...(prev.fusionDefaultModels || ['deepseek-chat', 'qwen/qwen3.8-27b', 'moonshotai/kimi-k3'])];
+                const next = [...(prev.fusionDefaultModels || ['mimo-v2.6-flash', 'google/gemini-3.8-flash', 'deepseek-v4-flash'])];
                 next[slotIndex] = modelName;
                 return { ...prev, fusionDefaultModels: next };
             });
@@ -341,9 +407,19 @@ export default function EngineSettings() {
                 if (data.fusionSlotProjects && Array.isArray(data.fusionSlotProjects)) {
                     const normalized = data.fusionSlotProjects.map((src: string) => {
                         if (!src) return '';
-                        if (src.startsWith('project:') || src.startsWith('key:')) return src;
+                        if (src.startsWith('project:')) {
+                            const pid = src.replace('project:', '');
+                            if ((projectsData || []).some((p: any) => p.id === pid)) return src;
+                            return '';
+                        }
+                        if (src.startsWith('key:')) {
+                            const kid = src.replace('key:', '');
+                            if ((providersData || []).some((k: any) => k.id === kid)) return src;
+                            return '';
+                        }
                         if ((projectsData || []).some((p: any) => p.id === src)) return `project:${src}`;
-                        return `key:${src}`;
+                        if ((providersData || []).some((k: any) => k.id === src)) return `key:${src}`;
+                        return '';
                     });
                     setFusionSlotKeys(normalized);
                     normalized.forEach((src: string) => {
@@ -418,6 +494,12 @@ export default function EngineSettings() {
         try {
             const payload: any = {
                 ...config,
+                fusionDefaultModels: [
+                    config.fusionDefaultModels?.[0] || 'mimo-v2.6-flash',
+                    config.fusionDefaultModels?.[1] || 'google/gemini-3.8-flash',
+                    config.fusionDefaultModels?.[2] || 'deepseek-v4-flash',
+                ],
+                fusionDefaultJudge: config.fusionDefaultJudge || 'mimo-v2.6-flash',
                 fusionSlotProjects: fusionSlotKeys,
             };
             if (typesafeKeyInput && !typesafeKeyInput.includes('••••') && !typesafeKeyInput.includes('...')) {
@@ -434,7 +516,7 @@ export default function EngineSettings() {
                 body: JSON.stringify(payload),
             });
 
-            if (res.success) {
+            if (res && res.success) {
                 if (res.config) {
                     setConfig(prev => ({ ...prev, ...res.config }));
                     if (res.config.fusionSlotProjects && Array.isArray(res.config.fusionSlotProjects)) {
@@ -443,6 +525,8 @@ export default function EngineSettings() {
                 }
                 setSaveSuccess(t('engine.saved_success') || 'Engine configurations saved successfully!');
                 setTimeout(() => setSaveSuccess(''), 4000);
+            } else {
+                throw new Error(res?.error || 'Failed to save configuration');
             }
         } catch (err: any) {
             setSaveError(err.message || 'Failed to save configuration');
@@ -958,46 +1042,28 @@ export default function EngineSettings() {
                     <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', alignItems: 'center' }}>
                         <button
                             type="button"
-                            onClick={() => {
-                                setConfig(prev => ({
-                                    ...prev,
-                                    fusionDefaultModels: ['deepseek-chat', 'qwen/qwen3.8-27b', 'meta/llama-3.3-70b-instruct'],
-                                    fusionDefaultJudge: 'deepseek-chat'
-                                }));
-                            }}
+                            onClick={() => handleApplyPreset('reasoning')}
                             className="btn btn-secondary btn-sm"
                             style={{ fontSize: '0.72rem', padding: '0.25rem 0.5rem' }}
-                            title="Terna de alto razonamiento lógico y código"
+                            title="Terna de pensamiento: MIMO 2.6 Pro, DeepSeek v4 Pro, Gemini 3.8 Flash"
                         >
                             🧠 Reasoning Trio
                         </button>
                         <button
                             type="button"
-                            onClick={() => {
-                                setConfig(prev => ({
-                                    ...prev,
-                                    fusionDefaultModels: ['gemini-2.5-flash', 'qwen/qwen3.8-27b', 'llama-3.3-70b-versatile'],
-                                    fusionDefaultJudge: 'gemini-2.5-flash'
-                                }));
-                            }}
+                            onClick={() => handleApplyPreset('speed')}
                             className="btn btn-secondary btn-sm"
                             style={{ fontSize: '0.72rem', padding: '0.25rem 0.5rem' }}
-                            title="Terna de alta velocidad para capas gratuitas"
+                            title="Terna de velocidad Flash: MIMO 2.6 Flash, Gemini 3.8 Flash (OpenRouter), DeepSeek 4 Flash"
                         >
                             ⚡ Speed & Free
                         </button>
                         <button
                             type="button"
-                            onClick={() => {
-                                setConfig(prev => ({
-                                    ...prev,
-                                    fusionDefaultModels: ['deepseek-chat', 'moonshotai/kimi-k3', 'minimaxai/minimax-m3'],
-                                    fusionDefaultJudge: 'deepseek-chat'
-                                }));
-                            }}
+                            onClick={() => handleApplyPreset('frontier')}
                             className="btn btn-secondary btn-sm"
                             style={{ fontSize: '0.72rem', padding: '0.25rem 0.5rem' }}
-                            title="Terna multi-proveedor asiático de frontera"
+                            title="Terna de frontera: Kimi K3, GLM 5.3 Flash, GPT-6 Luna"
                         >
                             🌐 Frontier Mix
                         </button>
@@ -1012,13 +1078,14 @@ export default function EngineSettings() {
                                 padding: '0.35rem 0.85rem',
                                 fontWeight: 700,
                                 gap: '0.4rem',
-                                background: '#8b5cf6',
-                                borderColor: '#7c3aed'
+                                background: saving ? 'var(--surface-3)' : '#8b5cf6',
+                                borderColor: '#7c3aed',
+                                cursor: saving ? 'not-allowed' : 'pointer'
                             }}
                             title="Guardar cambios de la terna Fusion y Motores"
                         >
                             {saving ? <RefreshCw size={13} className="spin" /> : <Save size={13} />}
-                            <span>{t('engine.save_config')}</span>
+                            <span>{saving ? (t('common.saving') || 'Guardando...') : (t('engine.save_config') || 'Save Motor Settings')}</span>
                         </button>
                     </div>
                 </div>
@@ -1038,6 +1105,24 @@ export default function EngineSettings() {
                     }}>
                         <Check size={14} />
                         <span>{saveSuccess}</span>
+                    </div>
+                )}
+
+                {saveError && (
+                    <div style={{
+                        padding: '0.45rem 0.75rem',
+                        borderRadius: 6,
+                        background: 'rgba(239,68,68,0.12)',
+                        border: '1px solid rgba(239,68,68,0.25)',
+                        color: '#ef4444',
+                        fontSize: '0.78rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.4rem',
+                        fontWeight: 600
+                    }}>
+                        <AlertCircle size={14} />
+                        <span>{saveError}</span>
                     </div>
                 )}
 
@@ -1085,10 +1170,10 @@ export default function EngineSettings() {
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem' }}>
                     {[
-                        { label: t('engine.fusion_slot_draft_a') || 'Modelo Contendiente 1 (Draft A)', color: 'var(--brand-orange)', placeholder: 'deepseek-chat', isJudge: false, index: 0 },
-                        { label: t('engine.fusion_slot_draft_b') || 'Modelo Contendiente 2 (Draft B)', color: 'var(--brand-orange)', placeholder: 'qwen/qwen3.8-27b', isJudge: false, index: 1 },
-                        { label: t('engine.fusion_slot_draft_c') || 'Modelo Contendiente 3 (Draft C)', color: 'var(--brand-orange)', placeholder: 'moonshotai/kimi-k3', isJudge: false, index: 2 },
-                        { label: t('engine.fusion_slot_judge') || 'Modelo Juez (Synthesizer Arbiter)', color: 'var(--text-primary)', placeholder: 'deepseek-chat', isJudge: true, index: 3 },
+                        { label: t('engine.fusion_slot_draft_a') || 'Modelo Contendiente 1 (Draft A)', color: 'var(--brand-orange)', placeholder: 'mimo-v2.6-flash', isJudge: false, index: 0 },
+                        { label: t('engine.fusion_slot_draft_b') || 'Modelo Contendiente 2 (Draft B)', color: 'var(--brand-orange)', placeholder: 'google/gemini-3.8-flash', isJudge: false, index: 1 },
+                        { label: t('engine.fusion_slot_draft_c') || 'Modelo Contendiente 3 (Draft C)', color: 'var(--brand-orange)', placeholder: 'deepseek-v4-flash', isJudge: false, index: 2 },
+                        { label: t('engine.fusion_slot_judge') || 'Modelo Juez (Synthesizer Arbiter)', color: 'var(--text-primary)', placeholder: 'mimo-v2.6-flash', isJudge: true, index: 3 },
                     ].map((slot) => {
                         const i = slot.index;
                         const currentModel = slot.isJudge
@@ -1300,44 +1385,6 @@ export default function EngineSettings() {
                     )}
                 </div>
             )}
-
-            {/* Sticky Floating Save Bar for frictionless ergonomics */}
-            <div style={{
-                position: 'fixed',
-                bottom: '1.5rem',
-                right: '2rem',
-                zIndex: 99,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.75rem',
-                background: 'rgba(23, 23, 23, 0.94)',
-                backdropFilter: 'blur(12px)',
-                padding: '0.55rem 0.95rem',
-                borderRadius: 12,
-                border: '1px solid var(--border-subtle)',
-                boxShadow: '0 8px 30px rgba(0,0,0,0.5)'
-            }}>
-                {saveSuccess ? (
-                    <span style={{ fontSize: '0.78rem', color: '#22c55e', display: 'flex', alignItems: 'center', gap: '0.35rem', fontWeight: 600 }}>
-                        <Check size={14} />
-                        {saveSuccess}
-                    </span>
-                ) : (
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                        TierMax Engine
-                    </span>
-                )}
-                <button
-                    type="button"
-                    onClick={() => handleSave()}
-                    disabled={saving}
-                    className="btn btn-primary"
-                    style={{ padding: '0.45rem 1.15rem', fontWeight: 700, gap: '0.45rem', fontSize: '0.8rem' }}
-                >
-                    {saving ? <RefreshCw size={13} className="spin" /> : <Save size={13} />}
-                    <span>{t('engine.save_config')}</span>
-                </button>
-            </div>
         </div>
     );
 }
