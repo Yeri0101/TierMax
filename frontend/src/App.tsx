@@ -1,8 +1,9 @@
 import { useState, useEffect, useContext, createContext, Component } from 'react';
 import type { ReactNode } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
-import { Globe, KeyRound, LogOut, Sun, Moon, LayoutDashboard, ShieldCheck } from 'lucide-react';
+import { Globe, KeyRound, LogOut, Sun, Moon, LayoutDashboard, ShieldCheck, Server } from 'lucide-react';
 import { TierMaxLogo, CyberTerminalGlyph, DualEngineGlyph } from './components/Icons';
+import { WelcomeServerModal } from './components/WelcomeServerModal';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import ProjectDetail from './pages/ProjectDetail';
@@ -110,6 +111,9 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showWelcomeModal, setShowWelcomeModal] = useState<boolean>(() => {
+    return localStorage.getItem('tiermax_hide_welcome') !== 'true';
+  });
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
@@ -255,6 +259,26 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
           )}
 
           <button
+            onClick={() => setShowWelcomeModal(true)}
+            className="btn btn-secondary"
+            title={t('nav.how_to_start')}
+            style={{
+              padding: '0.4rem 0.75rem',
+              gap: '0.35rem',
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              border: '1px solid rgba(56, 189, 248, 0.35)',
+              background: 'rgba(56, 189, 248, 0.08)',
+              color: '#38bdf8'
+            }}
+          >
+            <Server size={13} />
+            <span>{t('nav.how_to_start')}</span>
+          </button>
+
+          <button
             onClick={toggleLanguage}
             className="btn btn-secondary"
             style={{ padding: '0.4rem 0.7rem', gap: '0.3rem', fontSize: '0.75rem', fontFamily: 'var(--font-mono)', fontWeight: 700 }}
@@ -362,6 +386,12 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
           </div>
         </div>
       )}
+
+      {/* Welcome & Startup Guide Modal */}
+      <WelcomeServerModal
+        isOpen={showWelcomeModal}
+        onClose={() => setShowWelcomeModal(false)}
+      />
     </>
   );
 };
