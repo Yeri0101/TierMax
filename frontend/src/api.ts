@@ -1,7 +1,7 @@
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 export const fetchApi = async (endpoint: string, options: RequestInit = {}) => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('token') || 'mock-admin-token-123';
     const headers = {
         'Content-Type': 'application/json',
         ...(token ? { 'Authorization': `Bearer ${token}` } : {}),

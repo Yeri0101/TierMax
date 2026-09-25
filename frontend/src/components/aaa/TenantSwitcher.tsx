@@ -27,8 +27,7 @@ export const TenantSwitcher: React.FC = () => {
 
     useEffect(() => {
         let mounted = true;
-        fetchApi('/api/aaa/tenants')
-            .then(res => res.json())
+        fetchApi('/aaa/tenants')
             .then(data => {
                 if (mounted && data?.data && Array.isArray(data.data) && data.data.length > 0) {
                     setTenants(data.data);
