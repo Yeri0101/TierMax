@@ -26,7 +26,7 @@ projects.get('/dashboard-overview', async (c) => {
                 .limit(2000),
             supabase
                 .from('upstream_keys')
-                .select('id, billing_type'),
+                .select('id, billing_type, project_id, provider'),
         ]);
 
         if (projectsRes.error) return c.json({ error: projectsRes.error.message }, 500);
@@ -36,6 +36,8 @@ projects.get('/dashboard-overview', async (c) => {
         const upstreamKeys = upstreamKeysRes.data || [];
 
         const billingTypeMap = new Map(upstreamKeys.map((k: any) => [k.id, k.billing_type || 'paid']));
+        const upstreamKeyProjectMap = new Map(upstreamKeys.map((k: any) => [k.id, k.project_id]));
+        const upstreamKeyProviderMap = new Map(upstreamKeys.map((k: any) => [k.id, k.provider]));
         const projectNameMap = new Map(projectsData.map((p: any) => [p.id, p.name]));
 
         const gwProjectMap = new Map();
@@ -81,10 +83,20 @@ projects.get('/dashboard-overview', async (c) => {
         const recentCalls = logs
             .filter((log: any) => !!log.created_at)
             .map((log: any) => {
-                const projId = log.project_id || gwProjectMap.get(log.gateway_key_id);
+                const clientProjId = log.project_id || gwProjectMap.get(log.gateway_key_id);
+                const upstreamProjId = log.upstream_key_id ? upstreamKeyProjectMap.get(log.upstream_key_id) : null;
+                const effectiveProjId = upstreamProjId || clientProjId;
+                const resolvedProjectName = effectiveProjId ? (projectNameMap.get(effectiveProjId) || 'Proyecto') : 'Proyecto';
+                const clientProjectName = clientProjId ? projectNameMap.get(clientProjId) : null;
+                const bType = log.upstream_key_id ? (billingTypeMap.get(log.upstream_key_id) || 'free') : 'free';
+                const prov = log.provider || (log.upstream_key_id ? upstreamKeyProviderMap.get(log.upstream_key_id) : null) || '—';
+
                 return {
-                    project_id: projId,
-                    project_name: projId ? (projectNameMap.get(projId) || 'Proyecto') : 'Proyecto',
+                    project_id: effectiveProjId,
+                    project_name: resolvedProjectName,
+                    gateway_project_name: clientProjectName,
+                    provider: prov,
+                    billing_type: bType,
                     model: log.model || '—',
                     latency_ms: log.latency_ms ?? null,
                     total_tokens: log.total_tokens ?? 0,

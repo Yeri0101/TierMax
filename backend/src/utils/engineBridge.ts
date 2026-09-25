@@ -59,8 +59,13 @@ const DEFAULT_ENGINE_CONFIG: EngineConfig = {
     managerUpstreamKeyId: '',
 
     fusionDefaultModels: ['mimo-v2.6-flash', 'google/gemini-3.8-flash', 'deepseek-v4-flash'],
-    fusionDefaultJudge: 'mimo-v2.6-flash',
-    fusionSlotProjects: ['', '', '', ''],
+    fusionDefaultJudge: 'gemini-2.5-flash',
+    fusionSlotProjects: [
+        'project:7255d145-791a-48bd-a60b-b32df6bd33ed',
+        'project:48141bdc-fe82-43f5-a328-3f95d12c5523',
+        'project:80dec66d-eb1d-4ddf-bada-8a0ab6a6035d',
+        'project:48141bdc-fe82-43f5-a328-3f95d12c5523'
+    ],
 };
 
 let currentConfig: EngineConfig = { ...DEFAULT_ENGINE_CONFIG };

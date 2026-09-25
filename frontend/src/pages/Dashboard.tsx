@@ -25,6 +25,9 @@ type Project = {
 type RecentCall = {
     project_id: string;
     project_name: string;
+    gateway_project_name?: string | null;
+    provider?: string;
+    billing_type?: string;
     model: string;
     latency_ms: number | null;
     total_tokens: number;
@@ -441,8 +444,20 @@ export default function Dashboard() {
                                             #{index + 1}
                                         </div>
                                         <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '0.2rem' }}>{t('dashboard.recent_project')}</div>
-                                        <div style={{ fontSize: '0.98rem', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.2, marginBottom: '0.7rem' }}>
-                                            {call.project_name}
+                                        <div style={{ fontSize: '0.98rem', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.2, marginBottom: '0.7rem', display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                                            <span>{call.project_name}</span>
+                                            {call.billing_type && (
+                                                <span style={{
+                                                    fontSize: '0.62rem',
+                                                    padding: '0.1rem 0.35rem',
+                                                    borderRadius: 4,
+                                                    fontWeight: 600,
+                                                    background: call.billing_type === 'free' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
+                                                    color: call.billing_type === 'free' ? '#22c55e' : '#ef4444'
+                                                }}>
+                                                    {call.billing_type === 'free' ? '⚡ Gratis' : '💳 Premium'}
+                                                </span>
+                                            )}
                                         </div>
                                         <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '0.2rem' }}>{t('dashboard.recent_model')}</div>
                                         <div style={{ fontSize: '0.82rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', wordBreak: 'break-word' }}>
