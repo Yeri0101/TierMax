@@ -561,10 +561,10 @@ export default function EngineSettings() {
                     <div className="flex items-center justify-between" style={{ borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.75rem' }}>
                         <div className="flex items-center gap-2">
                             <div style={{
-                                width: 32, height: 32, borderRadius: 8, background: 'rgba(56,189,248,0.15)',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#38bdf8'
+                                width: 32, height: 32, borderRadius: 8, background: 'rgba(255,107,43,0.15)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--brand-orange)'
                             }}>
-                                <PromptAnchorGlyph size={18} color="#38bdf8" />
+                                <PromptAnchorGlyph size={18} color="var(--brand-orange)" />
                             </div>
                             <div>
                                 <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>{t('engine.system1_title')}</h3>
@@ -885,10 +885,10 @@ export default function EngineSettings() {
                 <div className="flex items-center justify-between" style={{ borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                     <div className="flex items-center gap-2">
                         <div style={{
-                            width: 32, height: 32, borderRadius: 8, background: 'rgba(192,132,252,0.15)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#c084fc'
+                            width: 32, height: 32, borderRadius: 8, background: 'rgba(255,107,43,0.12)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--brand-orange)'
                         }}>
-                            <RouterCascadeGlyph size={18} color="#c084fc" />
+                            <RouterCascadeGlyph size={18} color="var(--brand-orange)" />
                         </div>
                         <div>
                             <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>{t('engine.fusion_title') || 'Virtual Consensus Fusion · Panel Fijo de 3 Modelos & Juez'}</h3>
@@ -1026,10 +1026,10 @@ export default function EngineSettings() {
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem' }}>
                     {[
-                        { label: t('engine.fusion_slot_draft_a') || 'Modelo Contendiente 1 (Draft A)', color: '#38bdf8', placeholder: 'deepseek-chat', isJudge: false, index: 0 },
-                        { label: t('engine.fusion_slot_draft_b') || 'Modelo Contendiente 2 (Draft B)', color: '#ff6b2b', placeholder: 'qwen/qwen3.8-27b', isJudge: false, index: 1 },
-                        { label: t('engine.fusion_slot_draft_c') || 'Modelo Contendiente 3 (Draft C)', color: '#22c55e', placeholder: 'moonshotai/kimi-k3', isJudge: false, index: 2 },
-                        { label: t('engine.fusion_slot_judge') || 'Modelo Juez (Synthesizer Arbiter)', color: '#c084fc', placeholder: 'deepseek-chat', isJudge: true, index: 3 },
+                        { label: t('engine.fusion_slot_draft_a') || 'Modelo Contendiente 1 (Draft A)', color: 'var(--brand-orange)', placeholder: 'deepseek-chat', isJudge: false, index: 0 },
+                        { label: t('engine.fusion_slot_draft_b') || 'Modelo Contendiente 2 (Draft B)', color: 'var(--brand-orange)', placeholder: 'qwen/qwen3.8-27b', isJudge: false, index: 1 },
+                        { label: t('engine.fusion_slot_draft_c') || 'Modelo Contendiente 3 (Draft C)', color: 'var(--brand-orange)', placeholder: 'moonshotai/kimi-k3', isJudge: false, index: 2 },
+                        { label: t('engine.fusion_slot_judge') || 'Modelo Juez (Synthesizer Arbiter)', color: 'var(--text-primary)', placeholder: 'deepseek-chat', isJudge: true, index: 3 },
                     ].map((slot) => {
                         const i = slot.index;
                         const currentModel = slot.isJudge
@@ -1061,7 +1061,7 @@ export default function EngineSettings() {
                                         display: 'flex',
                                         alignItems: 'center',
                                         gap: '0.35rem',
-                                        color: slot.isJudge ? '#c084fc' : undefined,
+                                        color: slot.isJudge ? 'var(--brand-orange)' : undefined,
                                         margin: 0
                                     }}>
                                         <span style={{ width: 8, height: 8, borderRadius: '50%', background: slot.color }} />

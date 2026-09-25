@@ -23,8 +23,8 @@ export const TierMaxLogo: React.FC<IconProps> = ({ size = 20, className = '', ..
         <defs>
             <linearGradient id="tm-grad-1" x1="2" y1="2" x2="30" y2="30" gradientUnits="userSpaceOnUse">
                 <stop offset="0%" stopColor="#ff7b39" />
-                <stop offset="50%" stopColor="#ff4500" />
-                <stop offset="100%" stopColor="#a855f7" />
+                <stop offset="50%" stopColor="#ff5500" />
+                <stop offset="100%" stopColor="#c2410c" />
             </linearGradient>
             <linearGradient id="tm-core" x1="10" y1="10" x2="22" y2="22" gradientUnits="userSpaceOnUse">
                 <stop offset="0%" stopColor="#ffffff" />

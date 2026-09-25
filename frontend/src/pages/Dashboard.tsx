@@ -389,12 +389,12 @@ export default function Dashboard() {
                         </div>
                         <div className="usage-summary-divider" />
                         <div className="usage-summary-metric">
-                            <div className="usage-summary-icon" style={{ background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8' }}>
+                            <div className="usage-summary-icon" style={{ background: 'rgba(255, 107, 43, 0.1)', color: 'var(--brand-orange)' }}>
                                 <Zap size={15} />
                             </div>
                             <div>
                                 <div className="usage-summary-label">{t('dashboard.cache_stats')}</div>
-                                <div className="usage-summary-value" style={{ color: '#38bdf8' }}>
+                                <div className="usage-summary-value" style={{ color: 'var(--brand-orange)' }}>
                                     {cacheStats ? `${Math.round((cacheStats.hitRate || 0) * 100)}%` : '98%'}
                                 </div>
                                 <div className="usage-summary-detail">
@@ -417,9 +417,9 @@ export default function Dashboard() {
                                 alignItems: 'center',
                                 gap: '0.35rem',
                                 borderRadius: 'var(--radius-pill)',
-                                background: 'rgba(56, 189, 248, 0.12)',
-                                border: '1px solid rgba(56, 189, 248, 0.3)',
-                                color: '#38bdf8',
+                                background: 'rgba(255, 107, 43, 0.12)',
+                                border: '1px solid rgba(255, 107, 43, 0.3)',
+                                color: 'var(--brand-orange)',
                                 cursor: 'pointer',
                                 fontWeight: 600,
                             }}
@@ -570,15 +570,15 @@ export default function Dashboard() {
                         <div>
                             <div className="superpower-top">
                                 <div className="flex items-center gap-2">
-                                    <div className="superpower-icon-box" style={{ background: 'rgba(56,189,248,0.12)', border: '1px solid rgba(56,189,248,0.25)', color: '#38bdf8' }}>
+                                    <div className="superpower-icon-box" style={{ background: 'rgba(255,107,43,0.12)', border: '1px solid rgba(255,107,43,0.25)', color: 'var(--brand-orange)' }}>
                                         <AnthropicIcon size={17} />
                                     </div>
                                     <div>
                                         <div className="superpower-title">Anthropic Wire Protocol</div>
-                                        <div style={{ fontSize: '0.68rem', color: '#38bdf8', fontFamily: 'var(--font-mono)' }}>POST /v1/messages</div>
+                                        <div style={{ fontSize: '0.68rem', color: 'var(--brand-orange)', fontFamily: 'var(--font-mono)' }}>POST /v1/messages</div>
                                     </div>
                                 </div>
-                                <span className="superpower-badge" style={{ background: 'rgba(56,189,248,0.12)', color: '#38bdf8', border: '1px solid rgba(56,189,248,0.25)' }}>
+                                <span className="superpower-badge" style={{ background: 'rgba(255,107,43,0.12)', color: 'var(--brand-orange)', border: '1px solid rgba(255,107,43,0.25)' }}>
                                     Native SSE
                                 </span>
                             </div>
@@ -606,15 +606,15 @@ export default function Dashboard() {
                         <div>
                             <div className="superpower-top">
                                 <div className="flex items-center gap-2">
-                                    <div className="superpower-icon-box" style={{ background: 'rgba(192,132,252,0.12)', border: '1px solid rgba(192,132,252,0.25)', color: '#c084fc' }}>
-                                        <RouterCascadeGlyph size={17} color="#c084fc" />
+                                    <div className="superpower-icon-box" style={{ background: 'rgba(255,107,43,0.12)', border: '1px solid rgba(255,107,43,0.25)', color: 'var(--brand-orange)' }}>
+                                        <RouterCascadeGlyph size={17} color="var(--brand-orange)" />
                                     </div>
                                     <div>
                                         <div className="superpower-title">Virtual Consensus Fusion</div>
-                                        <div style={{ fontSize: '0.68rem', color: '#c084fc', fontFamily: 'var(--font-mono)' }}>model: "fusion"</div>
+                                        <div style={{ fontSize: '0.68rem', color: 'var(--brand-orange)', fontFamily: 'var(--font-mono)' }}>model: "fusion"</div>
                                     </div>
                                 </div>
-                                <span className="superpower-badge" style={{ background: 'rgba(192,132,252,0.12)', color: '#c084fc', border: '1px solid rgba(192,132,252,0.25)' }}>
+                                <span className="superpower-badge" style={{ background: 'rgba(255,107,43,0.12)', color: 'var(--brand-orange)', border: '1px solid rgba(255,107,43,0.25)' }}>
                                     Consensus
                                 </span>
                             </div>
@@ -799,21 +799,21 @@ export default function Dashboard() {
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }} onClick={e => e.preventDefault()}>
                                             <button
                                                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); toast.success(t('dashboard.preset_ultraspeed') + ' Activated'); }}
-                                                style={{ cursor: 'pointer', background: 'rgba(56,189,248,0.1)', color: '#38bdf8', border: '1px solid rgba(56,189,248,0.25)', fontSize: '0.68rem', padding: '0.15rem 0.4rem', borderRadius: '4px' }}
+                                                style={{ cursor: 'pointer', background: 'var(--surface-2)', color: 'var(--brand-orange)', border: '1px solid var(--border-subtle)', fontSize: '0.68rem', padding: '0.15rem 0.4rem', borderRadius: '4px' }}
                                                 title="Force Ultra-Speed routing (<100ms)"
                                             >
                                                 🏎️ Speed
                                             </button>
                                             <button
                                                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); toast.success(t('dashboard.preset_reasoning') + ' Activated'); }}
-                                                style={{ cursor: 'pointer', background: 'rgba(168,85,247,0.1)', color: '#c084fc', border: '1px solid rgba(168,85,247,0.25)', fontSize: '0.68rem', padding: '0.15rem 0.4rem', borderRadius: '4px' }}
+                                                style={{ cursor: 'pointer', background: 'var(--surface-2)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', fontSize: '0.68rem', padding: '0.15rem 0.4rem', borderRadius: '4px' }}
                                                 title="Enable Thinking / Deep Reasoning"
                                             >
                                                 🧠 Reason
                                             </button>
                                             <button
                                                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); toast.success(t('dashboard.preset_consensus') + ' Activated'); }}
-                                                style={{ cursor: 'pointer', background: 'rgba(16,185,129,0.1)', color: '#34d399', border: '1px solid rgba(16,185,129,0.25)', fontSize: '0.68rem', padding: '0.15rem 0.4rem', borderRadius: '4px' }}
+                                                style={{ cursor: 'pointer', background: 'var(--surface-2)', color: 'var(--status-healthy)', border: '1px solid var(--border-subtle)', fontSize: '0.68rem', padding: '0.15rem 0.4rem', borderRadius: '4px' }}
                                                 title="Activate 3-model virtual consensus fusion"
                                             >
                                                 ⚖️ Fusion

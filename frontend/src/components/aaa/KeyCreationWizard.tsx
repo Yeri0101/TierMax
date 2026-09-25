@@ -114,21 +114,21 @@ export const KeyCreationWizard: React.FC<KeyCreationWizardProps> = ({
             }}
         >
             <div style={{
-                background: 'var(--card-bg, #0f172a)',
-                border: '1px solid rgba(255, 255, 255, 0.12)',
+                background: 'var(--surface-card)',
+                border: '1px solid var(--border-default)',
                 borderRadius: '16px',
                 width: '100%',
                 maxWidth: '600px',
                 maxHeight: '90vh',
                 display: 'flex',
                 flexDirection: 'column',
-                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.6), 0 0 40px rgba(56, 189, 248, 0.12)',
+                boxShadow: 'var(--shadow-lg), 0 0 35px rgba(0, 0, 0, 0.3)',
                 overflow: 'hidden'
             }}>
                 {/* Header */}
                 <div style={{
                     padding: '1.25rem 1.5rem',
-                    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                    borderBottom: '1px solid var(--border-subtle)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between'
@@ -138,20 +138,20 @@ export const KeyCreationWizard: React.FC<KeyCreationWizardProps> = ({
                             width: 36,
                             height: 36,
                             borderRadius: '10px',
-                            background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(168, 85, 247, 0.2))',
-                            border: '1px solid rgba(56, 189, 248, 0.3)',
+                            background: 'var(--surface-2)',
+                            border: '1px solid var(--border-subtle)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            color: '#38bdf8'
+                            color: 'var(--brand-orange)'
                         }}>
                             <KeyRound size={20} />
                         </div>
                         <div>
-                            <h3 id="key-wizard-title" style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600 }}>
+                            <h3 id="key-wizard-title" style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                                 {createdKey ? (t('aaa.key_ready') || 'Hashed Key Created') : (t('aaa.create_key_title') || 'Generate Secure Hashed API Key')}
                             </h3>
-                            <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-muted, #94a3b8)' }}>
+                            <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-muted)' }}>
                                 {createdKey ? (t('aaa.key_ready_desc') || 'Copy your key now. It will never be shown again.') : (t('aaa.create_key_subtitle') || 'Enterprise SHA-256 hashed key with granular governance')}
                             </p>
                         </div>
@@ -216,8 +216,8 @@ export const KeyCreationWizard: React.FC<KeyCreationWizardProps> = ({
                                 <div style={{
                                     display: 'flex',
                                     alignItems: 'center',
-                                    background: 'rgba(0,0,0,0.5)',
-                                    border: '1px solid rgba(56, 189, 248, 0.3)',
+                                    background: 'var(--surface-2)',
+                                    border: '1px solid var(--border-subtle)',
                                     borderRadius: '8px',
                                     padding: '0.5rem 0.75rem',
                                     gap: '0.5rem'
@@ -230,7 +230,7 @@ export const KeyCreationWizard: React.FC<KeyCreationWizardProps> = ({
                                             flex: 1,
                                             background: 'transparent',
                                             border: 'none',
-                                            color: '#38bdf8',
+                                            color: 'var(--text-primary)',
                                             fontFamily: 'var(--font-mono, monospace)',
                                             fontSize: '0.82rem',
                                             outline: 'none'
@@ -246,8 +246,8 @@ export const KeyCreationWizard: React.FC<KeyCreationWizardProps> = ({
                                             padding: '0.35rem 0.75rem',
                                             borderRadius: '6px',
                                             border: 'none',
-                                            background: copied ? '#22c55e' : 'var(--brand-primary, #38bdf8)',
-                                            color: '#000',
+                                            background: copied ? 'var(--status-healthy)' : 'var(--brand-orange)',
+                                            color: '#ffffff',
                                             fontWeight: 700,
                                             fontSize: '0.78rem',
                                             cursor: 'pointer',

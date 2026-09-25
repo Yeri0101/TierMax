@@ -101,43 +101,43 @@ export const WelcomeServerModal: React.FC<WelcomeServerModalProps> = ({ isOpen, 
             }}
         >
             <div style={{
-                background: 'var(--card-bg, #0f172a)',
-                border: '1px solid rgba(255, 255, 255, 0.12)',
+                background: 'var(--surface-card)',
+                border: '1px solid var(--border-default)',
                 borderRadius: '16px',
                 width: '100%',
                 maxWidth: '720px',
                 maxHeight: '92vh',
                 display: 'flex',
                 flexDirection: 'column',
-                boxShadow: '0 25px 60px -10px rgba(0, 0, 0, 0.65), 0 0 50px rgba(56, 189, 248, 0.15)',
+                boxShadow: 'var(--shadow-lg), 0 0 40px rgba(0, 0, 0, 0.3)',
                 overflow: 'hidden'
             }}>
                 {/* Header */}
                 <div style={{
                     padding: '1.25rem 1.5rem',
-                    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                    borderBottom: '1px solid var(--border-subtle)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    background: 'linear-gradient(180deg, rgba(56, 189, 248, 0.05), transparent)'
+                    background: 'transparent'
                 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                         <div style={{
                             width: 40,
                             height: 40,
                             borderRadius: '10px',
-                            background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.25), rgba(168, 85, 247, 0.25))',
-                            border: '1px solid rgba(56, 189, 248, 0.4)',
+                            background: 'var(--surface-2)',
+                            border: '1px solid var(--border-subtle)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            color: '#38bdf8'
+                            color: 'var(--brand-orange)'
                         }}>
                             <Server size={22} />
                         </div>
                         <div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                <h3 id="welcome-modal-title" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700 }}>
+                                <h3 id="welcome-modal-title" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-primary)' }}>
                                     {t('welcome.title') || '🚀 ¿Cómo Iniciar el Servidor de TierMax?'}
                                 </h3>
                                 <span style={{
@@ -145,14 +145,14 @@ export const WelcomeServerModal: React.FC<WelcomeServerModalProps> = ({ isOpen, 
                                     fontWeight: 700,
                                     padding: '0.1rem 0.4rem',
                                     borderRadius: '4px',
-                                    background: 'rgba(56, 189, 248, 0.15)',
-                                    color: '#38bdf8',
-                                    border: '1px solid rgba(56, 189, 248, 0.3)'
+                                    background: 'rgba(255, 107, 43, 0.12)',
+                                    color: 'var(--brand-orange)',
+                                    border: '1px solid rgba(255, 107, 43, 0.25)'
                                 }}>
                                     {t('welcome.badge') || 'Guía Rápida'}
                                 </span>
                             </div>
-                            <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-muted, #94a3b8)' }}>
+                            <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-muted)' }}>
                                 {t('welcome.subtitle') || 'Aprende cómo arrancar el backend y los servicios en segundo plano al clonar el repositorio.'}
                             </p>
                         </div>
@@ -217,10 +217,10 @@ export const WelcomeServerModal: React.FC<WelcomeServerModalProps> = ({ isOpen, 
                         display: 'flex',
                         gap: '0.75rem',
                         fontSize: '0.8rem',
-                        color: 'var(--text-secondary, #cbd5e1)',
+                        color: 'var(--text-secondary)',
                         lineHeight: 1.5
                     }}>
-                        <Info size={18} style={{ color: '#38bdf8', flexShrink: 0, marginTop: 2 }} />
+                        <Info size={18} style={{ color: 'var(--brand-orange)', flexShrink: 0, marginTop: 2 }} />
                         <div>
                             <strong>{t('welcome.important_note') || '¿Se ejecuta PM2 automáticamente al descargar el repo?'}</strong>
                             <p style={{ margin: '0.25rem 0 0 0', opacity: 0.9 }}>
@@ -231,7 +231,7 @@ export const WelcomeServerModal: React.FC<WelcomeServerModalProps> = ({ isOpen, 
 
                     {/* Startup Methods Tabs */}
                     <div>
-                        <div style={{ display: 'flex', gap: '0.4rem', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', gap: '0.4rem', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
                             <button
                                 type="button"
                                 onClick={() => setActiveTab('quickstart')}
@@ -239,8 +239,8 @@ export const WelcomeServerModal: React.FC<WelcomeServerModalProps> = ({ isOpen, 
                                     padding: '0.4rem 0.8rem',
                                     borderRadius: '6px',
                                     border: 'none',
-                                    background: activeTab === 'quickstart' ? 'rgba(56, 189, 248, 0.15)' : 'transparent',
-                                    color: activeTab === 'quickstart' ? '#38bdf8' : 'var(--text-muted, #94a3b8)',
+                                    background: activeTab === 'quickstart' ? 'rgba(255, 107, 43, 0.12)' : 'transparent',
+                                    color: activeTab === 'quickstart' ? 'var(--brand-orange)' : 'var(--text-muted)',
                                     fontWeight: activeTab === 'quickstart' ? 700 : 500,
                                     fontSize: '0.78rem',
                                     cursor: 'pointer',
@@ -258,8 +258,8 @@ export const WelcomeServerModal: React.FC<WelcomeServerModalProps> = ({ isOpen, 
                                     padding: '0.4rem 0.8rem',
                                     borderRadius: '6px',
                                     border: 'none',
-                                    background: activeTab === 'npm' ? 'rgba(56, 189, 248, 0.15)' : 'transparent',
-                                    color: activeTab === 'npm' ? '#38bdf8' : 'var(--text-muted, #94a3b8)',
+                                    background: activeTab === 'npm' ? 'rgba(255, 107, 43, 0.12)' : 'transparent',
+                                    color: activeTab === 'npm' ? 'var(--brand-orange)' : 'var(--text-muted)',
                                     fontWeight: activeTab === 'npm' ? 700 : 500,
                                     fontSize: '0.78rem',
                                     cursor: 'pointer',
@@ -277,8 +277,8 @@ export const WelcomeServerModal: React.FC<WelcomeServerModalProps> = ({ isOpen, 
                                     padding: '0.4rem 0.8rem',
                                     borderRadius: '6px',
                                     border: 'none',
-                                    background: activeTab === 'pm2' ? 'rgba(56, 189, 248, 0.15)' : 'transparent',
-                                    color: activeTab === 'pm2' ? '#38bdf8' : 'var(--text-muted, #94a3b8)',
+                                    background: activeTab === 'pm2' ? 'rgba(255, 107, 43, 0.12)' : 'transparent',
+                                    color: activeTab === 'pm2' ? 'var(--brand-orange)' : 'var(--text-muted)',
                                     fontWeight: activeTab === 'pm2' ? 700 : 500,
                                     fontSize: '0.78rem',
                                     cursor: 'pointer',
@@ -296,8 +296,8 @@ export const WelcomeServerModal: React.FC<WelcomeServerModalProps> = ({ isOpen, 
                                     padding: '0.4rem 0.8rem',
                                     borderRadius: '6px',
                                     border: 'none',
-                                    background: activeTab === 'docker' ? 'rgba(56, 189, 248, 0.15)' : 'transparent',
-                                    color: activeTab === 'docker' ? '#38bdf8' : 'var(--text-muted, #94a3b8)',
+                                    background: activeTab === 'docker' ? 'rgba(255, 107, 43, 0.12)' : 'transparent',
+                                    color: activeTab === 'docker' ? 'var(--brand-orange)' : 'var(--text-muted)',
                                     fontWeight: activeTab === 'docker' ? 700 : 500,
                                     fontSize: '0.78rem',
                                     cursor: 'pointer',
@@ -322,11 +322,11 @@ export const WelcomeServerModal: React.FC<WelcomeServerModalProps> = ({ isOpen, 
                                     justifyContent: 'space-between',
                                     padding: '0.65rem 0.85rem',
                                     borderRadius: '8px',
-                                    background: 'rgba(0,0,0,0.5)',
-                                    border: '1px solid rgba(56, 189, 248, 0.25)',
+                                    background: 'var(--surface-2)',
+                                    border: '1px solid var(--border-subtle)',
                                     fontFamily: 'var(--font-mono, monospace)',
                                     fontSize: '0.82rem',
-                                    color: '#38bdf8'
+                                    color: 'var(--text-primary)'
                                 }}>
                                     <code>chmod +x ./quickstart.sh && ./quickstart.sh</code>
                                     <button
@@ -335,8 +335,8 @@ export const WelcomeServerModal: React.FC<WelcomeServerModalProps> = ({ isOpen, 
                                         style={{
                                             display: 'flex', alignItems: 'center', gap: '0.3rem',
                                             padding: '0.3rem 0.6rem', borderRadius: '5px',
-                                            border: 'none', background: copiedKey === 'quickstart' ? '#22c55e' : 'var(--brand-primary, #38bdf8)',
-                                            color: '#000', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer'
+                                            border: 'none', background: copiedKey === 'quickstart' ? 'var(--status-healthy)' : 'var(--brand-orange)',
+                                            color: '#ffffff', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer'
                                         }}
                                     >
                                         {copiedKey === 'quickstart' ? <CheckCircle2 size={12} /> : <Copy size={12} />}
@@ -357,11 +357,11 @@ export const WelcomeServerModal: React.FC<WelcomeServerModalProps> = ({ isOpen, 
                                     justifyContent: 'space-between',
                                     padding: '0.65rem 0.85rem',
                                     borderRadius: '8px',
-                                    background: 'rgba(0,0,0,0.5)',
-                                    border: '1px solid rgba(56, 189, 248, 0.25)',
+                                    background: 'var(--surface-2)',
+                                    border: '1px solid var(--border-subtle)',
                                     fontFamily: 'var(--font-mono, monospace)',
                                     fontSize: '0.82rem',
-                                    color: '#38bdf8'
+                                    color: 'var(--text-primary)'
                                 }}>
                                     <code>npm run install:all && npm run dev</code>
                                     <button
@@ -370,8 +370,8 @@ export const WelcomeServerModal: React.FC<WelcomeServerModalProps> = ({ isOpen, 
                                         style={{
                                             display: 'flex', alignItems: 'center', gap: '0.3rem',
                                             padding: '0.3rem 0.6rem', borderRadius: '5px',
-                                            border: 'none', background: copiedKey === 'npm' ? '#22c55e' : 'var(--brand-primary, #38bdf8)',
-                                            color: '#000', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer'
+                                            border: 'none', background: copiedKey === 'npm' ? 'var(--status-healthy)' : 'var(--brand-orange)',
+                                            color: '#ffffff', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer'
                                         }}
                                     >
                                         {copiedKey === 'npm' ? <CheckCircle2 size={12} /> : <Copy size={12} />}
@@ -392,11 +392,11 @@ export const WelcomeServerModal: React.FC<WelcomeServerModalProps> = ({ isOpen, 
                                     justifyContent: 'space-between',
                                     padding: '0.65rem 0.85rem',
                                     borderRadius: '8px',
-                                    background: 'rgba(0,0,0,0.5)',
-                                    border: '1px solid rgba(56, 189, 248, 0.25)',
+                                    background: 'var(--surface-2)',
+                                    border: '1px solid var(--border-subtle)',
                                     fontFamily: 'var(--font-mono, monospace)',
                                     fontSize: '0.82rem',
-                                    color: '#38bdf8'
+                                    color: 'var(--text-primary)'
                                 }}>
                                     <code>npm install -g pm2 && pm2 start ecosystem.config.js</code>
                                     <button
@@ -405,8 +405,8 @@ export const WelcomeServerModal: React.FC<WelcomeServerModalProps> = ({ isOpen, 
                                         style={{
                                             display: 'flex', alignItems: 'center', gap: '0.3rem',
                                             padding: '0.3rem 0.6rem', borderRadius: '5px',
-                                            border: 'none', background: copiedKey === 'pm2' ? '#22c55e' : 'var(--brand-primary, #38bdf8)',
-                                            color: '#000', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer'
+                                            border: 'none', background: copiedKey === 'pm2' ? 'var(--status-healthy)' : 'var(--brand-orange)',
+                                            color: '#ffffff', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer'
                                         }}
                                     >
                                         {copiedKey === 'pm2' ? <CheckCircle2 size={12} /> : <Copy size={12} />}
@@ -427,11 +427,11 @@ export const WelcomeServerModal: React.FC<WelcomeServerModalProps> = ({ isOpen, 
                                     justifyContent: 'space-between',
                                     padding: '0.65rem 0.85rem',
                                     borderRadius: '8px',
-                                    background: 'rgba(0,0,0,0.5)',
-                                    border: '1px solid rgba(56, 189, 248, 0.25)',
+                                    background: 'var(--surface-2)',
+                                    border: '1px solid var(--border-subtle)',
                                     fontFamily: 'var(--font-mono, monospace)',
                                     fontSize: '0.82rem',
-                                    color: '#38bdf8'
+                                    color: 'var(--text-primary)'
                                 }}>
                                     <code>docker compose up -d</code>
                                     <button
@@ -440,8 +440,8 @@ export const WelcomeServerModal: React.FC<WelcomeServerModalProps> = ({ isOpen, 
                                         style={{
                                             display: 'flex', alignItems: 'center', gap: '0.3rem',
                                             padding: '0.3rem 0.6rem', borderRadius: '5px',
-                                            border: 'none', background: copiedKey === 'docker' ? '#22c55e' : 'var(--brand-primary, #38bdf8)',
-                                            color: '#000', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer'
+                                            border: 'none', background: copiedKey === 'docker' ? 'var(--status-healthy)' : 'var(--brand-orange)',
+                                            color: '#ffffff', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer'
                                         }}
                                     >
                                         {copiedKey === 'docker' ? <CheckCircle2 size={12} /> : <Copy size={12} />}
@@ -456,13 +456,13 @@ export const WelcomeServerModal: React.FC<WelcomeServerModalProps> = ({ isOpen, 
                 {/* Footer */}
                 <div style={{
                     padding: '1rem 1.5rem',
-                    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                    borderTop: '1px solid var(--border-subtle)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    background: 'rgba(0,0,0,0.2)'
+                    background: 'var(--surface-1)'
                 }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.78rem', color: 'var(--text-muted, #94a3b8)', cursor: 'pointer' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.78rem', color: 'var(--text-muted)', cursor: 'pointer' }}>
                         <input
                             type="checkbox"
                             checked={dontShowAgain}

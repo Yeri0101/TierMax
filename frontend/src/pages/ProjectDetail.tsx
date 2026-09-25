@@ -1070,14 +1070,14 @@ export default function ProjectDetail() {
                         title="Click to view Dual Engine (TypeSafe Jev + LLM) status"
                         style={{
                             display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
-                            background: 'rgba(168,85,247,0.12)', border: '1px solid rgba(168,85,247,0.3)',
+                            background: 'rgba(255,107,43,0.12)', border: '1px solid rgba(255,107,43,0.3)',
                             borderRadius: 'var(--radius-pill)', padding: '0.28rem 0.65rem',
                             fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.06em',
-                            color: '#a855f7', textTransform: 'uppercase', cursor: 'pointer',
+                            color: 'var(--brand-orange)', textTransform: 'uppercase', cursor: 'pointer',
                             transition: 'all var(--transition-fast)',
                         }}
                     >
-                        <DualEngineGlyph size={12} color="#a855f7" /> {t('modes.badge_engine')}
+                        <DualEngineGlyph size={12} color="var(--brand-orange)" /> {t('modes.badge_engine')}
                     </button>
                 </div>
             </div>
@@ -2549,17 +2549,17 @@ export default function ProjectDetail() {
                             <div style={{
                                 padding: '1rem',
                                 borderRadius: 'var(--radius-md)',
-                                background: 'rgba(168,85,247,0.04)',
-                                border: '1px solid rgba(168,85,247,0.2)',
+                                background: 'rgba(255,107,43,0.04)',
+                                border: '1px solid rgba(255,107,43,0.2)',
                             }}>
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                                        <DualEngineGlyph size={15} color="#a855f7" />
+                                        <DualEngineGlyph size={15} color="var(--brand-orange)" />
                                         <strong style={{ fontSize: '0.88rem', color: 'var(--text-primary)' }}>{t('modes.engine_title')}</strong>
                                     </div>
                                     <span style={{
                                         fontSize: '0.65rem', fontWeight: 800, letterSpacing: '0.06em',
-                                        background: 'rgba(168,85,247,0.15)', color: '#a855f7',
+                                        background: 'rgba(255,107,43,0.15)', color: 'var(--brand-orange)',
                                         padding: '0.15rem 0.5rem', borderRadius: 'var(--radius-pill)',
                                     }}>
                                         {t('modes.active_badge')}
@@ -2576,7 +2576,7 @@ export default function ProjectDetail() {
                                     <Link
                                         to="/engines"
                                         onClick={() => setModesModalOpen(false)}
-                                        style={{ fontSize: '0.72rem', color: '#a855f7', fontWeight: 600, textDecoration: 'underline' }}
+                                        style={{ fontSize: '0.72rem', color: 'var(--brand-orange)', fontWeight: 600, textDecoration: 'underline' }}
                                     >
                                         {t('modes.config_engine')} →
                                     </Link>
@@ -2587,17 +2587,17 @@ export default function ProjectDetail() {
                             <div style={{
                                 padding: '1rem',
                                 borderRadius: 'var(--radius-md)',
-                                background: 'rgba(56,189,248,0.04)',
-                                border: '1px solid rgba(56,189,248,0.2)',
+                                background: 'rgba(255,107,43,0.04)',
+                                border: '1px solid rgba(255,107,43,0.2)',
                             }}>
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                                        <RouterCascadeGlyph size={15} color="#38bdf8" />
+                                        <RouterCascadeGlyph size={15} color="var(--brand-orange)" />
                                         <strong style={{ fontSize: '0.88rem', color: 'var(--text-primary)' }}>{t('modes.router_title')}</strong>
                                     </div>
                                     <span style={{
                                         fontSize: '0.65rem', fontWeight: 800, letterSpacing: '0.06em',
-                                        background: 'rgba(56,189,248,0.15)', color: '#38bdf8',
+                                        background: 'rgba(255,107,43,0.15)', color: 'var(--brand-orange)',
                                         padding: '0.15rem 0.5rem', borderRadius: 'var(--radius-pill)',
                                     }}>
                                         {t('modes.active_badge')}
@@ -2617,17 +2617,17 @@ export default function ProjectDetail() {
                             <div style={{
                                 padding: '1rem',
                                 borderRadius: 'var(--radius-md)',
-                                background: 'rgba(234,179,8,0.04)',
-                                border: '1px solid rgba(234,179,8,0.2)',
+                                background: 'rgba(16,185,129,0.04)',
+                                border: '1px solid rgba(16,185,129,0.2)',
                             }}>
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                                        <Activity size={14} style={{ color: '#eab308' }} />
+                                        <Activity size={14} style={{ color: 'var(--status-healthy)' }} />
                                         <strong style={{ fontSize: '0.88rem', color: 'var(--text-primary)' }}>{t('modes.fusion_title')}</strong>
                                     </div>
                                     <span style={{
                                         fontSize: '0.65rem', fontWeight: 800, letterSpacing: '0.06em',
-                                        background: 'rgba(234,179,8,0.15)', color: '#eab308',
+                                        background: 'rgba(16,185,129,0.15)', color: 'var(--status-healthy)',
                                         padding: '0.15rem 0.5rem', borderRadius: 'var(--radius-pill)',
                                     }}>
                                         READY

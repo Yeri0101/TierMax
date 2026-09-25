@@ -149,13 +149,12 @@ export default function AuditLogs() {
     const getSeverityBadge = (severity: string) => {
         switch (severity) {
             case 'CRITICAL':
-                return { bg: 'rgba(239, 68, 68, 0.15)', border: '#ef4444', text: '#f87171' };
+                return { bg: 'rgba(239, 68, 68, 0.15)', border: 'var(--status-error)', text: 'var(--status-error)' };
             case 'ALERT':
-                return { bg: 'rgba(249, 115, 22, 0.15)', border: '#f97316', text: '#fb923c' };
             case 'WARNING':
-                return { bg: 'rgba(234, 179, 8, 0.15)', border: '#eab308', text: '#fde047' };
+                return { bg: 'rgba(255, 107, 43, 0.15)', border: 'var(--brand-orange)', text: 'var(--brand-orange)' };
             default:
-                return { bg: 'rgba(56, 189, 248, 0.15)', border: '#38bdf8', text: '#7dd3fc' };
+                return { bg: 'var(--surface-2)', border: 'var(--border-subtle)', text: 'var(--text-secondary)' };
         }
     };
 
@@ -167,14 +166,14 @@ export default function AuditLogs() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.25rem' }}>
                         <div style={{
                             width: 34, height: 34, borderRadius: 8,
-                            background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(168, 85, 247, 0.2))',
-                            border: '1px solid rgba(56, 189, 248, 0.3)',
+                            background: 'var(--surface-2)',
+                            border: '1px solid var(--border-subtle)',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            color: '#38bdf8'
+                            color: 'var(--brand-orange)'
                         }}>
                             <ShieldCheck size={20} />
                         </div>
-                        <h1 style={{ fontSize: '1.4rem', fontWeight: 700, margin: 0 }}>
+                        <h1 style={{ fontSize: '1.4rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
                             {t('audit.title') || 'Security & Compliance Audit Trail'}
                         </h1>
                     </div>
@@ -270,9 +269,9 @@ export default function AuditLogs() {
                             style={{
                                 padding: '0.25rem 0.6rem',
                                 borderRadius: '6px',
-                                border: `1px solid ${severityFilter === sev ? 'var(--brand-primary, #38bdf8)' : 'rgba(255,255,255,0.1)'}`,
-                                background: severityFilter === sev ? 'rgba(56, 189, 248, 0.2)' : 'transparent',
-                                color: severityFilter === sev ? '#38bdf8' : 'var(--text-muted, #94a3b8)',
+                                border: `1px solid ${severityFilter === sev ? 'var(--brand-orange)' : 'var(--border-subtle)'}`,
+                                background: severityFilter === sev ? 'rgba(255, 107, 43, 0.15)' : 'transparent',
+                                color: severityFilter === sev ? 'var(--brand-orange)' : 'var(--text-muted)',
                                 fontSize: '0.72rem',
                                 fontWeight: 700,
                                 cursor: 'pointer',
@@ -287,19 +286,19 @@ export default function AuditLogs() {
 
             {/* Audit Events Table */}
             <div style={{
-                background: 'var(--card-bg, #0f172a)',
+                background: 'var(--surface-card)',
                 borderRadius: '12px',
-                border: '1px solid var(--border-subtle, rgba(255,255,255,0.08))',
+                border: '1px solid var(--border-default)',
                 overflow: 'hidden',
-                boxShadow: '0 4px 20px -2px rgba(0,0,0,0.3)'
+                boxShadow: 'var(--shadow-card)'
             }}>
                 <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.82rem' }}>
                         <thead>
                             <tr style={{
-                                borderBottom: '1px solid rgba(255,255,255,0.08)',
-                                background: 'rgba(255,255,255,0.02)',
-                                color: 'var(--text-muted, #94a3b8)',
+                                borderBottom: '1px solid var(--border-subtle)',
+                                background: 'var(--surface-1)',
+                                color: 'var(--text-muted)',
                                 fontSize: '0.75rem',
                                 textTransform: 'uppercase',
                                 letterSpacing: '0.04em'
@@ -391,7 +390,7 @@ export default function AuditLogs() {
                                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                                                                 <span><strong>Event ID:</strong> {event.id}</span>
                                                                 <span>·</span>
-                                                                <span><strong>Prev Hash Pointer:</strong> <code style={{ color: '#38bdf8' }}>{event.prevHash ? `${event.prevHash.slice(0, 16)}...` : 'GENESIS'}</code></span>
+                                                                <span><strong>Prev Hash Pointer:</strong> <code style={{ color: 'var(--brand-orange)' }}>{event.prevHash ? `${event.prevHash.slice(0, 16)}...` : 'GENESIS'}</code></span>
                                                             </div>
                                                             <div>
                                                                 <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '0.3rem', textTransform: 'uppercase' }}>

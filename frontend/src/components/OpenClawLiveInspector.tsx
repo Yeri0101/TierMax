@@ -40,21 +40,21 @@ export const OpenClawLiveInspector: React.FC<OpenClawLiveInspectorProps> = ({ is
             animation: 'fadeIn 0.2s ease-out'
         }}>
             <div style={{
-                background: 'var(--card-bg, #0f172a)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
+                background: 'var(--surface-card)',
+                border: '1px solid var(--border-default)',
                 borderRadius: '16px',
                 width: '100%',
                 maxWidth: '750px',
                 maxHeight: '90vh',
                 display: 'flex',
                 flexDirection: 'column',
-                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 40px rgba(56, 189, 248, 0.15)',
+                boxShadow: 'var(--shadow-lg), 0 0 35px rgba(0, 0, 0, 0.3)',
                 overflow: 'hidden'
             }}>
                 {/* Header */}
                 <div style={{
                     padding: '1.25rem 1.5rem',
-                    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                    borderBottom: '1px solid var(--border-subtle)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between'
@@ -64,18 +64,18 @@ export const OpenClawLiveInspector: React.FC<OpenClawLiveInspectorProps> = ({ is
                             width: 36,
                             height: 36,
                             borderRadius: '10px',
-                            background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(168, 85, 247, 0.2))',
-                            border: '1px solid rgba(56, 189, 248, 0.3)',
+                            background: 'var(--surface-2)',
+                            border: '1px solid var(--border-subtle)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            color: '#38bdf8'
+                            color: 'var(--brand-orange)'
                         }}>
                             <Activity size={20} className="pulse-slow" />
                         </div>
                         <div>
-                            <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 600 }}>{t('inspector.title')}</h3>
-                            <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted, #94a3b8)' }}>{t('inspector.subtitle')}</p>
+                            <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 600, color: 'var(--text-primary)' }}>{t('inspector.title')}</h3>
+                            <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('inspector.subtitle')}</p>
                         </div>
                     </div>
                     <button
@@ -83,7 +83,7 @@ export const OpenClawLiveInspector: React.FC<OpenClawLiveInspectorProps> = ({ is
                         style={{
                             background: 'transparent',
                             border: 'none',
-                            color: 'var(--text-muted, #94a3b8)',
+                            color: 'var(--text-muted)',
                             cursor: 'pointer',
                             padding: '0.5rem',
                             borderRadius: '8px'
@@ -97,7 +97,7 @@ export const OpenClawLiveInspector: React.FC<OpenClawLiveInspectorProps> = ({ is
                 <div style={{ padding: '1.5rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                     {/* Routing Preset Selector */}
                     <div>
-                        <label style={{ fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted, #94a3b8)', marginBottom: '0.5rem', display: 'block' }}>
+                        <label style={{ fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '0.5rem', display: 'block' }}>
                             {t('dashboard.preset_active')}
                         </label>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem' }}>
@@ -106,9 +106,9 @@ export const OpenClawLiveInspector: React.FC<OpenClawLiveInspectorProps> = ({ is
                                 style={{
                                     padding: '0.75rem',
                                     borderRadius: '10px',
-                                    border: activePreset === 'ultraspeed' ? '1px solid #38bdf8' : '1px solid rgba(255,255,255,0.08)',
-                                    background: activePreset === 'ultraspeed' ? 'rgba(56, 189, 248, 0.12)' : 'rgba(255,255,255,0.02)',
-                                    color: activePreset === 'ultraspeed' ? '#38bdf8' : 'var(--text-muted, #94a3b8)',
+                                    border: activePreset === 'ultraspeed' ? '1px solid var(--brand-orange)' : '1px solid var(--border-subtle)',
+                                    background: activePreset === 'ultraspeed' ? 'rgba(255, 107, 43, 0.12)' : 'var(--surface-2)',
+                                    color: activePreset === 'ultraspeed' ? 'var(--brand-orange)' : 'var(--text-muted)',
                                     cursor: 'pointer',
                                     textAlign: 'left',
                                     transition: 'all 0.15s ease'
@@ -125,9 +125,9 @@ export const OpenClawLiveInspector: React.FC<OpenClawLiveInspectorProps> = ({ is
                                 style={{
                                     padding: '0.75rem',
                                     borderRadius: '10px',
-                                    border: activePreset === 'reasoning' ? '1px solid #a855f7' : '1px solid rgba(255,255,255,0.08)',
-                                    background: activePreset === 'reasoning' ? 'rgba(168, 85, 247, 0.12)' : 'rgba(255,255,255,0.02)',
-                                    color: activePreset === 'reasoning' ? '#c084fc' : 'var(--text-muted, #94a3b8)',
+                                    border: activePreset === 'reasoning' ? '1px solid var(--brand-orange)' : '1px solid var(--border-subtle)',
+                                    background: activePreset === 'reasoning' ? 'rgba(255, 107, 43, 0.12)' : 'var(--surface-2)',
+                                    color: activePreset === 'reasoning' ? 'var(--brand-orange)' : 'var(--text-muted)',
                                     cursor: 'pointer',
                                     textAlign: 'left',
                                     transition: 'all 0.15s ease'
@@ -144,9 +144,9 @@ export const OpenClawLiveInspector: React.FC<OpenClawLiveInspectorProps> = ({ is
                                 style={{
                                     padding: '0.75rem',
                                     borderRadius: '10px',
-                                    border: activePreset === 'consensus' ? '1px solid #10b981' : '1px solid rgba(255,255,255,0.08)',
-                                    background: activePreset === 'consensus' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(255,255,255,0.02)',
-                                    color: activePreset === 'consensus' ? '#34d399' : 'var(--text-muted, #94a3b8)',
+                                    border: activePreset === 'consensus' ? '1px solid var(--status-healthy)' : '1px solid var(--border-subtle)',
+                                    background: activePreset === 'consensus' ? 'rgba(16, 185, 129, 0.12)' : 'var(--surface-2)',
+                                    color: activePreset === 'consensus' ? 'var(--status-healthy)' : 'var(--text-muted)',
                                     cursor: 'pointer',
                                     textAlign: 'left',
                                     transition: 'all 0.15s ease'
@@ -162,25 +162,25 @@ export const OpenClawLiveInspector: React.FC<OpenClawLiveInspectorProps> = ({ is
 
                     {/* Telemetry Stats Grid */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
-                        <div style={{ padding: '0.9rem', borderRadius: '12px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#10b981', fontSize: '0.8rem', marginBottom: '0.3rem' }}>
+                        <div style={{ padding: '0.9rem', borderRadius: '12px', background: 'var(--surface-2)', border: '1px solid var(--border-subtle)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--status-healthy)', fontSize: '0.8rem', marginBottom: '0.3rem' }}>
                                 <CheckCircle2 size={14} /> {t('inspector.tokens_saved')}
                             </div>
-                            <div style={{ fontSize: '1.25rem', fontWeight: 700 }}>42,576 <span style={{ fontSize: '0.75rem', color: '#10b981' }}>(-94%)</span></div>
+                            <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>42,576 <span style={{ fontSize: '0.75rem', color: 'var(--status-healthy)' }}>(-94%)</span></div>
                         </div>
 
-                        <div style={{ padding: '0.9rem', borderRadius: '12px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#38bdf8', fontSize: '0.8rem', marginBottom: '0.3rem' }}>
+                        <div style={{ padding: '0.9rem', borderRadius: '12px', background: 'var(--surface-2)', border: '1px solid var(--border-subtle)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--brand-orange)', fontSize: '0.8rem', marginBottom: '0.3rem' }}>
                                 <Clock size={14} /> {t('inspector.latency_ttft')}
                             </div>
-                            <div style={{ fontSize: '1.25rem', fontWeight: 700 }}>58 ms <span style={{ fontSize: '0.75rem', color: '#38bdf8' }}>(⚡ Ultra-Fast)</span></div>
+                            <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>58 ms <span style={{ fontSize: '0.75rem', color: 'var(--brand-orange)' }}>(⚡ Ultra-Fast)</span></div>
                         </div>
 
-                        <div style={{ padding: '0.9rem', borderRadius: '12px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#c084fc', fontSize: '0.8rem', marginBottom: '0.3rem' }}>
+                        <div style={{ padding: '0.9rem', borderRadius: '12px', background: 'var(--surface-2)', border: '1px solid var(--border-subtle)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '0.3rem' }}>
                                 <Cpu size={14} /> {t('inspector.active_model')}
                             </div>
-                            <div style={{ fontSize: '1.1rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                 qwen3.8-27b
                             </div>
                         </div>
@@ -189,21 +189,21 @@ export const OpenClawLiveInspector: React.FC<OpenClawLiveInspectorProps> = ({ is
                     {/* Live Stream Terminal Preview */}
                     <div>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
-                            <span style={{ fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted, #94a3b8)' }}>
+                            <span style={{ fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>
                                 {t('inspector.live_stream')}
                             </span>
-                            <span style={{ fontSize: '0.75rem', color: '#10b981', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', display: 'inline-block' }} /> Live Connected
+                            <span style={{ fontSize: '0.75rem', color: 'var(--status-healthy)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                                <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--status-healthy)', display: 'inline-block' }} /> Live Connected
                             </span>
                         </div>
                         <div style={{
-                            background: '#090d16',
-                            border: '1px solid rgba(255,255,255,0.08)',
+                            background: 'var(--surface-2)',
+                            border: '1px solid var(--border-subtle)',
                             borderRadius: '10px',
                             padding: '1rem',
-                            fontFamily: 'monospace',
+                            fontFamily: 'var(--font-mono, monospace)',
                             fontSize: '0.85rem',
-                            color: '#e2e8f0',
+                            color: 'var(--text-primary)',
                             minHeight: '160px',
                             maxHeight: '260px',
                             overflowY: 'auto',
@@ -218,11 +218,11 @@ export const OpenClawLiveInspector: React.FC<OpenClawLiveInspectorProps> = ({ is
                 {/* Footer */}
                 <div style={{
                     padding: '1rem 1.5rem',
-                    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                    borderTop: '1px solid var(--border-subtle)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'flex-end',
-                    background: 'rgba(0,0,0,0.1)'
+                    background: 'var(--surface-1)'
                 }}>
                     <button
                         onClick={onClose}

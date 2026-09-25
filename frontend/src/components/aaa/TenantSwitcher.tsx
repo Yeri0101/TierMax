@@ -53,10 +53,10 @@ export const TenantSwitcher: React.FC = () => {
                     alignItems: 'center',
                     gap: '0.45rem',
                     padding: '0.3rem 0.65rem',
-                    borderRadius: 'var(--radius-pill, 9999px)',
-                    border: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
-                    background: 'var(--surface-card, rgba(15,23,42,0.6))',
-                    color: 'var(--text-primary, #f8fafc)',
+                    borderRadius: 'var(--radius-pill)',
+                    border: '1px solid var(--border-subtle)',
+                    background: 'var(--surface-card)',
+                    color: 'var(--text-primary)',
                     fontSize: '0.75rem',
                     fontWeight: 600,
                     cursor: 'pointer',
@@ -64,7 +64,7 @@ export const TenantSwitcher: React.FC = () => {
                 }}
                 title={t('aaa.tenant_select') || 'Select Organization'}
             >
-                <Building2 size={13} style={{ color: '#38bdf8' }} />
+                <Building2 size={13} style={{ color: 'var(--text-secondary)' }} />
                 <span>{activeTenant.name}</span>
                 <span style={{
                     fontSize: '0.62rem',
@@ -72,9 +72,9 @@ export const TenantSwitcher: React.FC = () => {
                     textTransform: 'uppercase',
                     padding: '0.1rem 0.35rem',
                     borderRadius: '4px',
-                    background: activeTenant.tier === 'enterprise' ? 'rgba(168,85,247,0.15)' : 'rgba(56,189,248,0.15)',
-                    color: activeTenant.tier === 'enterprise' ? '#c084fc' : '#38bdf8',
-                    border: `1px solid ${activeTenant.tier === 'enterprise' ? 'rgba(168,85,247,0.3)' : 'rgba(56,189,248,0.3)'}`
+                    background: 'var(--surface-2)',
+                    color: 'var(--text-secondary)',
+                    border: '1px solid var(--border-subtle)'
                 }}>
                     {activeTenant.tier}
                 </span>
@@ -92,20 +92,20 @@ export const TenantSwitcher: React.FC = () => {
                         top: 'calc(100% + 6px)',
                         left: 0,
                         minWidth: '220px',
-                        background: 'var(--card-bg, #0f172a)',
-                        border: '1px solid rgba(255,255,255,0.12)',
+                        background: 'var(--surface-card)',
+                        border: '1px solid var(--border-default)',
                         borderRadius: '10px',
-                        boxShadow: '0 10px 25px -5px rgba(0,0,0,0.5), 0 0 15px rgba(56,189,248,0.1)',
+                        boxShadow: 'var(--shadow-lg), 0 0 16px rgba(0,0,0,0.15)',
                         zIndex: 999,
                         padding: '0.4rem',
-                        backdropFilter: 'blur(12px)',
+                        backdropFilter: 'blur(16px)',
                     }}>
                         <div style={{
                             padding: '0.35rem 0.5rem',
                             fontSize: '0.68rem',
                             fontWeight: 700,
                             letterSpacing: '0.05em',
-                            color: 'var(--text-muted, #94a3b8)',
+                            color: 'var(--text-muted)',
                             textTransform: 'uppercase',
                             display: 'flex',
                             alignItems: 'center',
@@ -126,20 +126,26 @@ export const TenantSwitcher: React.FC = () => {
                                     padding: '0.45rem 0.6rem',
                                     borderRadius: '6px',
                                     border: 'none',
-                                    background: t.id === activeTenant.id ? 'rgba(56,189,248,0.1)' : 'transparent',
-                                    color: t.id === activeTenant.id ? '#38bdf8' : 'var(--text-primary, #f8fafc)',
+                                    background: t.id === activeTenant.id ? 'rgba(255, 107, 43, 0.12)' : 'transparent',
+                                    color: t.id === activeTenant.id ? 'var(--brand-orange)' : 'var(--text-primary)',
                                     fontSize: '0.78rem',
                                     fontWeight: t.id === activeTenant.id ? 700 : 500,
                                     cursor: 'pointer',
                                     textAlign: 'left',
                                     transition: 'background 0.15s'
                                 }}
+                                onMouseEnter={e => {
+                                    if (t.id !== activeTenant.id) e.currentTarget.style.background = 'var(--surface-hover)';
+                                }}
+                                onMouseLeave={e => {
+                                    if (t.id !== activeTenant.id) e.currentTarget.style.background = 'transparent';
+                                }}
                             >
                                 <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                                     <Building2 size={13} style={{ opacity: 0.8 }} />
                                     {t.name}
                                 </span>
-                                {t.id === activeTenant.id && <Check size={13} style={{ color: '#38bdf8' }} />}
+                                {t.id === activeTenant.id && <Check size={13} style={{ color: 'var(--brand-orange)' }} />}
                             </button>
                         ))}
                     </div>
