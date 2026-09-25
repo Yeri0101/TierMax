@@ -109,7 +109,7 @@ export const NavbarSettingsMenu: React.FC<NavbarSettingsMenuProps> = ({
                 />
             </button>
 
-            {/* Centered Modal Overlay (Occupies ~50% of screen, well centered) */}
+            {/* Centered Modal Overlay (Occupies ~50% of screen, well centered and lower) */}
             {isOpen && (
                 <div
                     className="settings-modal-backdrop"
@@ -124,7 +124,8 @@ export const NavbarSettingsMenu: React.FC<NavbarSettingsMenuProps> = ({
                         alignItems: "center",
                         justifyContent: "center",
                         zIndex: 2500,
-                        padding: "1.25rem",
+                        padding: "3.5rem 1.25rem 2rem 1.25rem",
+                        overflowY: "auto",
                         animation: "fadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1)",
                     }}
                 >
@@ -133,17 +134,19 @@ export const NavbarSettingsMenu: React.FC<NavbarSettingsMenuProps> = ({
                         onClick={e => e.stopPropagation()}
                         style={{
                             width: "100%",
-                            maxWidth: "720px",
+                            maxWidth: "680px",
+                            margin: "auto",
+                            marginTop: "1.25rem",
                             background: "var(--surface-card)",
                             border: "1px solid var(--border-default)",
                             borderRadius: "16px",
                             boxShadow: "var(--shadow-lg), 0 25px 60px -12px rgba(0, 0, 0, 0.65)",
-                            padding: "1.75rem",
+                            padding: "1.25rem 1.5rem",
                             display: "flex",
                             flexDirection: "column",
-                            gap: "1.25rem",
+                            gap: "0.9rem",
                             animation: "fadeInScale 0.22s cubic-bezier(0.16, 1, 0.3, 1)",
-                            maxHeight: "90vh",
+                            maxHeight: "calc(100vh - 5.5rem)",
                             overflowY: "auto",
                         }}
                     >
@@ -152,13 +155,13 @@ export const NavbarSettingsMenu: React.FC<NavbarSettingsMenuProps> = ({
                             display: "flex",
                             alignItems: "flex-start",
                             justifyContent: "space-between",
-                            paddingBottom: "1rem",
+                            paddingBottom: "0.75rem",
                             borderBottom: "1px solid var(--border-subtle)",
                         }}>
                             <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
                                 <div style={{
-                                    width: 40,
-                                    height: 40,
+                                    width: 36,
+                                    height: 36,
                                     borderRadius: "10px",
                                     background: "var(--surface-2)",
                                     border: "1px solid var(--border-default)",
@@ -168,11 +171,11 @@ export const NavbarSettingsMenu: React.FC<NavbarSettingsMenuProps> = ({
                                     color: "var(--text-primary)",
                                     flexShrink: 0
                                 }}>
-                                    <Sliders size={20} />
+                                    <Sliders size={18} />
                                 </div>
                                 <div>
                                     <h2 style={{ 
-                                        fontSize: "1.2rem", 
+                                        fontSize: "1.12rem", 
                                         fontWeight: 800, 
                                         color: "var(--text-primary)", 
                                         margin: 0,
@@ -181,9 +184,9 @@ export const NavbarSettingsMenu: React.FC<NavbarSettingsMenuProps> = ({
                                         {t("nav.settings_menu") || "Sistema y Preferencias"}
                                     </h2>
                                     <p style={{ 
-                                        fontSize: "0.8rem", 
+                                        fontSize: "0.78rem", 
                                         color: "var(--text-secondary)", 
-                                        margin: "0.2rem 0 0 0" 
+                                        margin: "0.15rem 0 0 0" 
                                     }}>
                                         TierMax SOAT Gateway • Panel de Control & Preferencias
                                     </p>
@@ -224,17 +227,17 @@ export const NavbarSettingsMenu: React.FC<NavbarSettingsMenuProps> = ({
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "space-between",
-                            padding: "0.85rem 1rem",
+                            padding: "0.55rem 0.85rem",
                             background: "var(--surface-2)",
                             borderRadius: "10px",
                             border: "1px solid var(--border-subtle)",
                             flexWrap: "wrap",
-                            gap: "0.75rem"
+                            gap: "0.6rem"
                         }}>
                             <div style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
                                 <div style={{
-                                    width: 34,
-                                    height: 34,
+                                    width: 32,
+                                    height: 32,
                                     borderRadius: "50%",
                                     background: "var(--surface-card)",
                                     border: "1px solid var(--border-default)",
@@ -243,10 +246,10 @@ export const NavbarSettingsMenu: React.FC<NavbarSettingsMenuProps> = ({
                                     justifyContent: "center",
                                     color: "var(--text-primary)"
                                 }}>
-                                    <User size={16} />
+                                    <User size={15} />
                                 </div>
                                 <div>
-                                    <div style={{ fontSize: "0.88rem", fontWeight: 700, color: "var(--text-primary)" }}>
+                                    <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--text-primary)" }}>
                                         {username || "Admin"}
                                     </div>
                                     <div style={{ fontSize: "0.72rem", color: "var(--text-secondary)" }}>
@@ -294,20 +297,20 @@ export const NavbarSettingsMenu: React.FC<NavbarSettingsMenuProps> = ({
                         {/* Spacious Two-Column Grid for Options */}
                         <div style={{
                             display: "grid",
-                            gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
-                            gap: "1.25rem",
+                            gridTemplateColumns: "repeat(auto-fit, minmax(290px, 1fr))",
+                            gap: "0.85rem",
                         }}>
                             {/* Column 1: Workspace & Server */}
-                            <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
                                 {/* Organization / Tenant */}
                                 <div style={{
                                     background: "var(--surface-card)",
                                     border: "1px solid var(--border-default)",
                                     borderRadius: "12px",
-                                    padding: "1rem",
+                                    padding: "0.85rem",
                                     display: "flex",
                                     flexDirection: "column",
-                                    gap: "0.6rem"
+                                    gap: "0.5rem"
                                 }}>
                                     <div style={{ display: "flex", alignItems: "center", gap: "0.45rem" }}>
                                         <Layers size={14} style={{ color: "var(--text-secondary)" }} />
@@ -318,7 +321,7 @@ export const NavbarSettingsMenu: React.FC<NavbarSettingsMenuProps> = ({
                                     <p style={{ fontSize: "0.76rem", color: "var(--text-muted)", margin: 0 }}>
                                         Selecciona el espacio de trabajo o inquilino multi-tenant actual.
                                     </p>
-                                    <div style={{ marginTop: "0.2rem" }}>
+                                    <div style={{ marginTop: "0.15rem" }}>
                                         <TenantSwitcher />
                                     </div>
                                 </div>
@@ -328,10 +331,10 @@ export const NavbarSettingsMenu: React.FC<NavbarSettingsMenuProps> = ({
                                     background: "var(--surface-card)",
                                     border: "1px solid var(--border-default)",
                                     borderRadius: "12px",
-                                    padding: "1rem",
+                                    padding: "0.85rem",
                                     display: "flex",
                                     flexDirection: "column",
-                                    gap: "0.6rem"
+                                    gap: "0.5rem"
                                 }}>
                                     <div style={{ display: "flex", alignItems: "center", gap: "0.45rem" }}>
                                         <Server size={14} style={{ color: "var(--text-secondary)" }} />
@@ -354,10 +357,10 @@ export const NavbarSettingsMenu: React.FC<NavbarSettingsMenuProps> = ({
                                             alignItems: "center",
                                             justifyContent: "space-between",
                                             width: "100%",
-                                            padding: "0.55rem 0.85rem",
+                                            padding: "0.5rem 0.8rem",
                                             fontSize: "0.8rem",
                                             fontWeight: 600,
-                                            marginTop: "0.2rem"
+                                            marginTop: "0.15rem"
                                         }}
                                     >
                                         <span style={{ display: "flex", alignItems: "center", gap: "0.45rem" }}>
@@ -380,16 +383,16 @@ export const NavbarSettingsMenu: React.FC<NavbarSettingsMenuProps> = ({
                             </div>
 
                             {/* Column 2: System Preferences (Language & Theme) */}
-                            <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
                                 {/* Language */}
                                 <div style={{
                                     background: "var(--surface-card)",
                                     border: "1px solid var(--border-default)",
                                     borderRadius: "12px",
-                                    padding: "1rem",
+                                    padding: "0.85rem",
                                     display: "flex",
                                     flexDirection: "column",
-                                    gap: "0.6rem"
+                                    gap: "0.5rem"
                                 }}>
                                     <div style={{ display: "flex", alignItems: "center", gap: "0.45rem" }}>
                                         <Globe size={14} style={{ color: "var(--text-secondary)" }} />
@@ -454,10 +457,10 @@ export const NavbarSettingsMenu: React.FC<NavbarSettingsMenuProps> = ({
                                     background: "var(--surface-card)",
                                     border: "1px solid var(--border-default)",
                                     borderRadius: "12px",
-                                    padding: "1rem",
+                                    padding: "0.85rem",
                                     display: "flex",
                                     flexDirection: "column",
-                                    gap: "0.6rem"
+                                    gap: "0.5rem"
                                 }}>
                                     <div style={{ display: "flex", alignItems: "center", gap: "0.45rem" }}>
                                         {theme === "dark" ? <Moon size={14} style={{ color: "var(--text-secondary)" }} /> : <Sun size={14} style={{ color: "var(--brand-amber)" }} />}
@@ -468,7 +471,7 @@ export const NavbarSettingsMenu: React.FC<NavbarSettingsMenuProps> = ({
                                     <p style={{ fontSize: "0.76rem", color: "var(--text-muted)", margin: 0 }}>
                                         Alterna entre el modo oscuro de alto contraste y el modo claro.
                                     </p>
-                                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", marginTop: "0.2rem" }}>
+                                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", marginTop: "0.15rem" }}>
                                         <button
                                             type="button"
                                             onClick={() => { if (theme !== "dark") toggleTheme(); }}
@@ -523,7 +526,7 @@ export const NavbarSettingsMenu: React.FC<NavbarSettingsMenuProps> = ({
 
                         {/* Security and Logout Footer */}
                         <div style={{
-                            paddingTop: "1rem",
+                            paddingTop: "0.75rem",
                             borderTop: "1px solid var(--border-subtle)",
                             display: "flex",
                             alignItems: "center",

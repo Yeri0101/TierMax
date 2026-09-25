@@ -38,7 +38,7 @@ type UsageMetrics = {
 };
 
 export default function Dashboard() {
-    const { t } = useLanguage();
+    const { t, language } = useLanguage();
     const navigate = useNavigate();
     const toast = useToast();
     const [projects, setProjects] = useState<Project[]>([]);
@@ -524,7 +524,7 @@ export default function Dashboard() {
                     <div className="flex items-center gap-2" style={{ flexWrap: 'wrap' }}>
                         <TierMaxLogo size={20} />
                         <h2 style={{ fontSize: '1.15rem', fontWeight: 800, margin: 0, letterSpacing: '-0.01em', color: 'var(--text-primary)' }}>
-                            TierMax Architecture & Protocols
+                            {t('protocols.title')}
                         </h2>
                         <span style={{
                             fontSize: '0.68rem', fontWeight: 800, letterSpacing: '0.06em',
@@ -533,7 +533,7 @@ export default function Dashboard() {
                             display: 'inline-flex', alignItems: 'center', gap: '0.3rem'
                         }}>
                             <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e' }} />
-                            ACTIVE
+                            {t('protocols.active')}
                         </span>
                         <button
                             type="button"
@@ -542,13 +542,13 @@ export default function Dashboard() {
                             onMouseEnter={() => setActivePopover('general')}
                             onMouseLeave={() => setActivePopover(null)}
                             onClick={() => setActivePopover(activePopover === 'general' ? null : 'general')}
-                            title="Ver detalles de la arquitectura"
+                            title={t('protocols.view_details')}
                         >
                             <HelpCircle size={14} style={{ color: 'var(--text-secondary)' }} />
                         </button>
                     </div>
                     <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
-                        Inspirado en arquitecturas de alto rendimiento (freellmapi) · Multi-Proveedor Inteligente
+                        {t('protocols.subtitle')}
                     </span>
 
                     {/* General Architecture Popover */}
@@ -562,28 +562,32 @@ export default function Dashboard() {
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.5rem' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
                                     <TierMaxLogo size={16} />
-                                    <span style={{ fontSize: '0.88rem', fontWeight: 800, color: 'var(--text-primary)' }}>Arquitectura TierMax SOAT</span>
+                                    <span style={{ fontSize: '0.88rem', fontWeight: 800, color: 'var(--text-primary)' }}>{t('protocols.general_title')}</span>
                                 </div>
                                 <span style={{ fontSize: '0.65rem', padding: '0.15rem 0.45rem', borderRadius: '4px', background: 'rgba(34, 197, 94, 0.15)', color: '#22c55e', fontWeight: 700 }}>
-                                    High Performance
+                                    {t('protocols.high_performance')}
                                 </span>
                             </div>
                             <div>
                                 <div style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-primary)', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                                     <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#38bdf8' }} />
-                                    ¿Qué es?
+                                    {t('protocols.what_is')}
                                 </div>
                                 <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
-                                    Infraestructura de proxy inteligente inspirada en freellmapi. Unifica en un único puerto protocolos OpenAI y Anthropic, balanceo de carga automático, circuit breakers anti-429 y consenso distribuido multi-modelo.
+                                    {t('protocols.general_desc')}
                                 </p>
                             </div>
                             <div>
                                 <div style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-primary)', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                                     <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e' }} />
-                                    ¿Dónde se configura?
+                                    {t('protocols.where_to_configure')}
                                 </div>
                                 <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
-                                    Servidor central y puertos en <code>backend/src/index.ts</code>, variables globales en <code>backend/.env</code> y guía paso a paso en <strong>Ajustes &gt; Guía del Servidor</strong>.
+                                    {language === 'en' ? (
+                                        <>Central server and ports in <code>backend/src/index.ts</code>, global environment variables in <code>backend/.env</code>, and step-by-step setup in <strong>Settings &gt; Server Guide</strong>.</>
+                                    ) : (
+                                        <>Servidor central y puertos en <code>backend/src/index.ts</code>, variables globales en <code>backend/.env</code> y guía paso a paso en <strong>Ajustes &gt; Guía del Servidor</strong>.</>
+                                    )}
                                 </p>
                             </div>
                         </div>
@@ -604,16 +608,20 @@ export default function Dashboard() {
                                         <AnthropicIcon size={19} />
                                     </div>
                                     <div>
-                                        <div className="superpower-title">Anthropic Wire Protocol</div>
+                                        <div className="superpower-title">{t('protocols.anthropic_title')}</div>
                                         <div style={{ fontSize: '0.74rem', color: '#38bdf8', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>POST /v1/messages</div>
                                     </div>
                                 </div>
                                 <span className="superpower-badge" style={{ background: 'var(--surface-2)', color: 'var(--text-primary)', border: '1px solid var(--border-default)' }}>
-                                    Native SSE
+                                    {t('protocols.anthropic_badge')}
                                 </span>
                             </div>
                             <p className="superpower-desc">
-                                Conexión directa con <strong>Claude Code CLI</strong>, <code>@anthropic-ai/sdk</code>, Aider y Cursor usando llaves <code>gk_...</code>. Streaming SSE estricto y mapeo bi-direccional.
+                                {language === 'en' ? (
+                                    <>Direct connection to <strong>Claude Code CLI</strong>, <code>@anthropic-ai/sdk</code>, Aider, and Cursor using <code>gk_...</code> keys. Strict SSE streaming and bi-directional mapping.</>
+                                ) : (
+                                    <>Conexión directa con <strong>Claude Code CLI</strong>, <code>@anthropic-ai/sdk</code>, Aider y Cursor usando llaves <code>gk_...</code>. Streaming SSE estricto y mapeo bi-direccional.</>
+                                )}
                             </p>
                         </div>
 
@@ -626,7 +634,7 @@ export default function Dashboard() {
                                     onClick={() => handleCopySnippet('export ANTHROPIC_BASE_URL="http://localhost:3000"', 'anthropic')}
                                     className="btn btn-secondary btn-icon"
                                     style={{ padding: '0.15rem 0.35rem', height: 24, width: 24, flexShrink: 0 }}
-                                    title="Copiar comando Claude Code"
+                                    title={t('protocols.anthropic_copy_title')}
                                 >
                                     {copiedSnippet === 'anthropic' ? <Check size={12} style={{ color: '#22c55e' }} /> : <Copy size={12} />}
                                 </button>
@@ -653,7 +661,7 @@ export default function Dashboard() {
                                 }}
                             >
                                 <HelpCircle size={13} style={{ color: '#38bdf8' }} />
-                                <span>¿Qué es &amp; Dónde se configura?</span>
+                                <span>{t('protocols.learn_more')}</span>
                             </button>
                         </div>
 
@@ -667,7 +675,7 @@ export default function Dashboard() {
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.5rem' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
                                         <AnthropicIcon size={16} />
-                                        <span style={{ fontSize: '0.88rem', fontWeight: 800, color: 'var(--text-primary)' }}>Anthropic Wire Protocol</span>
+                                        <span style={{ fontSize: '0.88rem', fontWeight: 800, color: 'var(--text-primary)' }}>{t('protocols.anthropic_title')}</span>
                                     </div>
                                     <span style={{ fontSize: '0.65rem', padding: '0.15rem 0.45rem', borderRadius: '4px', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', fontWeight: 700 }}>
                                         POST /v1/messages
@@ -676,20 +684,32 @@ export default function Dashboard() {
                                 <div>
                                     <div style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-primary)', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                                         <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#38bdf8' }} />
-                                        ¿Qué es?
+                                        {t('protocols.what_is')}
                                     </div>
                                     <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
-                                        Emulación nativa 100% de la API de Anthropic Claude Messages. Permite conectar herramientas de desarrollo como <strong>Claude Code CLI</strong>, Cursor, Aider y cualquier script con <code>@anthropic-ai/sdk</code> directamente al Gateway sin modificar código.
+                                        {language === 'en' ? (
+                                            <>Native 100% emulation of the Anthropic Claude Messages API. Connect developer tools like <strong>Claude Code CLI</strong>, Cursor, Aider, and any script with <code>@anthropic-ai/sdk</code> directly to the Gateway without modifying code.</>
+                                        ) : (
+                                            <>Emulación nativa 100% de la API de Anthropic Claude Messages. Permite conectar herramientas de desarrollo como <strong>Claude Code CLI</strong>, Cursor, Aider y cualquier script con <code>@anthropic-ai/sdk</code> directamente al Gateway sin modificar código.</>
+                                        )}
                                     </p>
                                 </div>
                                 <div>
                                     <div style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-primary)', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                                         <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e' }} />
-                                        ¿Dónde se configura?
+                                        {t('protocols.where_to_configure')}
                                     </div>
                                     <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.5, display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-                                        <div>• <strong>En tu terminal:</strong> Configura <code>export ANTHROPIC_BASE_URL="http://localhost:3000"</code> y <code>export ANTHROPIC_API_KEY="gk_..."</code> generada en <strong>Proyectos &gt; API Keys</strong>.</div>
-                                        <div>• <strong>En el Gateway (código):</strong> Rutas y transformadores en <code>backend/src/api/routes/anthropic.ts</code>.</div>
+                                        <div>• <strong>{t('protocols.anthropic_pop_terminal_label')}</strong> {language === 'en' ? (
+                                            <>Configure <code>export ANTHROPIC_BASE_URL="http://localhost:3000"</code> and <code>export ANTHROPIC_API_KEY="gk_..."</code> generated in <strong>Projects &gt; API Keys</strong>.</>
+                                        ) : (
+                                            <>Configura <code>export ANTHROPIC_BASE_URL="http://localhost:3000"</code> y <code>export ANTHROPIC_API_KEY="gk_..."</code> generada en <strong>Proyectos &gt; API Keys</strong>.</>
+                                        )}</div>
+                                        <div>• <strong>{t('protocols.anthropic_pop_gateway_label')}</strong> {language === 'en' ? (
+                                            <>Routes and transformers in <code>backend/src/api/routes/anthropic.ts</code>.</>
+                                        ) : (
+                                            <>Rutas y transformadores en <code>backend/src/api/routes/anthropic.ts</code>.</>
+                                        )}</div>
                                     </div>
                                 </div>
                             </div>
@@ -709,16 +729,20 @@ export default function Dashboard() {
                                         <RouterCascadeGlyph size={19} color="var(--text-primary)" />
                                     </div>
                                     <div>
-                                        <div className="superpower-title">Virtual Consensus Fusion</div>
+                                        <div className="superpower-title">{t('protocols.fusion_title')}</div>
                                         <div style={{ fontSize: '0.74rem', color: '#38bdf8', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>model: "fusion"</div>
                                     </div>
                                 </div>
                                 <span className="superpower-badge" style={{ background: 'rgba(34, 197, 94, 0.12)', color: '#22c55e', border: '1px solid rgba(34, 197, 94, 0.3)' }}>
-                                    Consensus
+                                    {t('protocols.fusion_badge')}
                                 </span>
                             </div>
                             <p className="superpower-desc">
-                                Despacho paralelo a 3 modelos heterogéneos activos + síntesis dialéctica con modelo juez anti-alucinaciones y telemetría transparente <code>_openclaw_fusion</code>.
+                                {language === 'en' ? (
+                                    <>Parallel dispatch to 3 active heterogeneous models + dialectical synthesis with an anti-hallucination judge model and transparent <code>_openclaw_fusion</code> telemetry.</>
+                                ) : (
+                                    <>Despacho paralelo a 3 modelos heterogéneos activos + síntesis dialéctica con modelo juez anti-alucinaciones y telemetría transparente <code>_openclaw_fusion</code>.</>
+                                )}
                             </p>
                         </div>
 
@@ -729,7 +753,7 @@ export default function Dashboard() {
                                     onClick={() => handleCopySnippet('"model": "fusion"', 'fusion')}
                                     className="btn btn-secondary btn-icon"
                                     style={{ padding: '0.15rem 0.35rem', height: 24, width: 24, flexShrink: 0 }}
-                                    title="Copiar nombre de modelo"
+                                    title={t('protocols.fusion_copy_title')}
                                 >
                                     {copiedSnippet === 'fusion' ? <Check size={12} style={{ color: '#22c55e' }} /> : <Copy size={12} />}
                                 </button>
@@ -756,7 +780,7 @@ export default function Dashboard() {
                                 }}
                             >
                                 <HelpCircle size={13} style={{ color: '#38bdf8' }} />
-                                <span>¿Qué es &amp; Dónde se configura?</span>
+                                <span>{t('protocols.learn_more')}</span>
                             </button>
                         </div>
 
@@ -770,29 +794,41 @@ export default function Dashboard() {
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.5rem' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
                                         <RouterCascadeGlyph size={16} color="var(--text-primary)" />
-                                        <span style={{ fontSize: '0.88rem', fontWeight: 800, color: 'var(--text-primary)' }}>Virtual Consensus Fusion</span>
+                                        <span style={{ fontSize: '0.88rem', fontWeight: 800, color: 'var(--text-primary)' }}>{t('protocols.fusion_title')}</span>
                                     </div>
                                     <span style={{ fontSize: '0.65rem', padding: '0.15rem 0.45rem', borderRadius: '4px', background: 'rgba(34, 197, 94, 0.15)', color: '#22c55e', fontWeight: 700 }}>
-                                        Consensus Engine
+                                        {t('protocols.fusion_engine_badge')}
                                     </span>
                                 </div>
                                 <div>
                                     <div style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-primary)', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                                         <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#38bdf8' }} />
-                                        ¿Qué es?
+                                        {t('protocols.what_is')}
                                     </div>
                                     <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
-                                        Enrutamiento de consenso distribuido. Envía tu consulta en paralelo a 3 modelos LLM activos heterogéneos. Un modelo juez sintetiza las respuestas dialécticamente eliminando alucinaciones y entregando la respuesta óptima con telemetría <code>_openclaw_fusion</code>.
+                                        {language === 'en' ? (
+                                            <>Distributed consensus routing. Dispatches your query in parallel across 3 active heterogeneous LLMs. A judge model dialectically synthesizes responses, eliminating hallucinations and delivering the optimal answer with <code>_openclaw_fusion</code> telemetry.</>
+                                        ) : (
+                                            <>Enrutamiento de consenso distribuido. Envía tu consulta en paralelo a 3 modelos LLM activos heterogéneos. Un modelo juez sintetiza las respuestas dialécticamente eliminando alucinaciones y entregando la respuesta óptima con telemetría <code>_openclaw_fusion</code>.</>
+                                        )}
                                     </p>
                                 </div>
                                 <div>
                                     <div style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-primary)', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                                         <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e' }} />
-                                        ¿Dónde se configura?
+                                        {t('protocols.where_to_configure')}
                                     </div>
                                     <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.5, display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-                                        <div>• <strong>En tus peticiones:</strong> Usa el modelo <code>"model": "fusion"</code> en llamadas a <code>/v1/chat/completions</code> o <code>/v1/messages</code>.</div>
-                                        <div>• <strong>En el Gateway (código):</strong> Modelos del consenso, pesos y prompt del juez en <code>backend/src/services/router.ts</code>.</div>
+                                        <div>• <strong>{t('protocols.fusion_pop_requests_label')}</strong> {language === 'en' ? (
+                                            <>Use model <code>"model": "fusion"</code> in calls to <code>/v1/chat/completions</code> or <code>/v1/messages</code>.</>
+                                        ) : (
+                                            <>Usa el modelo <code>"model": "fusion"</code> en llamadas a <code>/v1/chat/completions</code> o <code>/v1/messages</code>.</>
+                                        )}</div>
+                                        <div>• <strong>{t('protocols.fusion_pop_gateway_label')}</strong> {language === 'en' ? (
+                                            <>Consensus models, weights, and judge prompt in <code>backend/src/services/router.ts</code>.</>
+                                        ) : (
+                                            <>Modelos del consenso, pesos y prompt del juez en <code>backend/src/services/router.ts</code>.</>
+                                        )}</div>
                                     </div>
                                 </div>
                             </div>
@@ -812,16 +848,20 @@ export default function Dashboard() {
                                         <DualEngineGlyph size={19} color="var(--text-primary)" />
                                     </div>
                                     <div>
-                                        <div className="superpower-title">Ecosistema &amp; Modelos</div>
-                                        <div style={{ fontSize: '0.74rem', color: '#38bdf8', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>16+ Proveedores</div>
+                                        <div className="superpower-title">{t('protocols.ecosystem_title')}</div>
+                                        <div style={{ fontSize: '0.74rem', color: '#38bdf8', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{t('protocols.ecosystem_subtitle')}</div>
                                     </div>
                                 </div>
                                 <span className="superpower-badge" style={{ background: 'var(--surface-2)', color: 'var(--text-primary)', border: '1px solid var(--border-default)' }}>
-                                    Zero-Drop SOAT
+                                    {t('protocols.ecosystem_badge')}
                                 </span>
                             </div>
                             <p className="superpower-desc" style={{ marginBottom: '0.75rem' }}>
-                                Catálogo potenciado con <strong>Qwen 2.5</strong> (Groq), <strong>Kimi K3</strong> (Moonshot/NIM), <strong>MiniMax M3</strong> y <strong>DeepSeek Direct</strong> con auto-failover inteligente.
+                                {language === 'en' ? (
+                                    <>Expanded catalog featuring <strong>Qwen 2.5</strong> (Groq), <strong>Kimi K3</strong> (Moonshot/NIM), <strong>MiniMax M3</strong>, and <strong>DeepSeek Direct</strong> with intelligent auto-failover.</>
+                                ) : (
+                                    <>Catálogo potenciado con <strong>Qwen 2.5</strong> (Groq), <strong>Kimi K3</strong> (Moonshot/NIM), <strong>MiniMax M3</strong> y <strong>DeepSeek Direct</strong> con auto-failover inteligente.</>
+                                )}
                             </p>
                         </div>
 
@@ -855,7 +895,7 @@ export default function Dashboard() {
                                 }}
                             >
                                 <HelpCircle size={13} style={{ color: '#38bdf8' }} />
-                                <span>¿Qué es &amp; Dónde se configura?</span>
+                                <span>{t('protocols.learn_more')}</span>
                             </button>
                         </div>
 
@@ -869,7 +909,7 @@ export default function Dashboard() {
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.5rem' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
                                         <DualEngineGlyph size={16} color="var(--text-primary)" />
-                                        <span style={{ fontSize: '0.88rem', fontWeight: 800, color: 'var(--text-primary)' }}>Ecosistema Multi-Proveedor &amp; SOAT</span>
+                                        <span style={{ fontSize: '0.88rem', fontWeight: 800, color: 'var(--text-primary)' }}>{t('protocols.ecosystem_pop_title')}</span>
                                     </div>
                                     <span style={{ fontSize: '0.65rem', padding: '0.15rem 0.45rem', borderRadius: '4px', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', fontWeight: 700 }}>
                                         16+ Providers
@@ -878,20 +918,28 @@ export default function Dashboard() {
                                 <div>
                                     <div style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-primary)', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                                         <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#38bdf8' }} />
-                                        ¿Qué es?
+                                        {t('protocols.what_is')}
                                     </div>
                                     <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
-                                        Capa de abstracción y balanceo de carga entre más de 16 proveedores. Ante cualquier error 429 de límite de cuota o fallo de red, se activa el conmutador por error (auto-failover) de forma transparente sin interrumpir las aplicaciones cliente.
+                                        {t('protocols.ecosystem_pop_desc')}
                                     </p>
                                 </div>
                                 <div>
                                     <div style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-primary)', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                                         <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e' }} />
-                                        ¿Dónde se configura?
+                                        {t('protocols.where_to_configure')}
                                     </div>
                                     <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.5, display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-                                        <div>• <strong>Variables de Entorno:</strong> En <code>backend/.env</code> (<code>GROQ_API_KEY</code>, <code>NVIDIA_NIM_API_KEY</code>, <code>DEEPSEEK_API_KEY</code>, etc.).</div>
-                                        <div>• <strong>En el Gateway (código):</strong> Balanceadores, circuit breakers y selección en <code>backend/src/services/providers.ts</code>.</div>
+                                        <div>• <strong>{t('protocols.ecosystem_pop_env_label')}</strong> {language === 'en' ? (
+                                            <>In <code>backend/.env</code> (<code>GROQ_API_KEY</code>, <code>NVIDIA_NIM_API_KEY</code>, <code>DEEPSEEK_API_KEY</code>, etc.).</>
+                                        ) : (
+                                            <>En <code>backend/.env</code> (<code>GROQ_API_KEY</code>, <code>NVIDIA_NIM_API_KEY</code>, <code>DEEPSEEK_API_KEY</code>, etc.).</>
+                                        )}</div>
+                                        <div>• <strong>{t('protocols.ecosystem_pop_gateway_label')}</strong> {language === 'en' ? (
+                                            <>Load balancers, circuit breakers, and selection in <code>backend/src/services/providers.ts</code>.</>
+                                        ) : (
+                                            <>Balanceadores, circuit breakers y selección en <code>backend/src/services/providers.ts</code>.</>
+                                        )}</div>
                                     </div>
                                 </div>
                             </div>

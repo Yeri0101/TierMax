@@ -1,7 +1,7 @@
 import { useState, useEffect, useContext, createContext, Component } from 'react';
 import type { ReactNode } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { KeyRound, Sun, Moon, LayoutDashboard, ShieldCheck } from 'lucide-react';
+import { KeyRound, Sun, Moon, LayoutDashboard, ShieldCheck, Globe } from 'lucide-react';
 import { TierMaxLogo, CyberTerminalGlyph, DualEngineGlyph } from './components/Icons';
 import { WelcomeServerModal } from './components/WelcomeServerModal';
 import { NavbarSettingsMenu } from './components/NavbarSettingsMenu';
@@ -259,6 +259,32 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
             >
               <Moon size={15} style={{ color: 'var(--text-muted)' }} />
             </span>
+          </button>
+
+          {/* Quick language toggle */}
+          <button
+            type="button"
+            onClick={toggleLanguage}
+            className="btn btn-secondary"
+            title={language === 'en' ? 'Cambiar a Español' : 'Switch to English'}
+            style={{
+              height: 32,
+              padding: '0 0.6rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+              fontSize: '0.74rem',
+              fontWeight: 700,
+              borderRadius: 'var(--radius-pill)',
+              background: 'var(--surface-card)',
+              border: '1px solid var(--border-subtle)',
+              color: 'var(--text-primary)',
+              cursor: 'pointer',
+              letterSpacing: '0.04em'
+            }}
+          >
+            <Globe size={13} style={{ color: 'var(--text-secondary)' }} />
+            <span>{language.toUpperCase()}</span>
           </button>
 
           {/* Unified Settings Dropdown: Groups Server Guide, Language, Theme, Password, Logout, Tenant & DB info */}
