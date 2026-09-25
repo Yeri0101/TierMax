@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { fetchApi } from '../api';
-import { FolderOpen, Plus, Trash2, Edit2, Zap, Palette, Key, Activity, Copy, Check, DollarSign } from 'lucide-react';
+import { FolderOpen, Plus, Trash2, Edit2, Zap, Key, Activity, Copy, Check, DollarSign, HelpCircle } from 'lucide-react';
 import { TierMaxLogo, AnthropicIcon, RouterCascadeGlyph, DualEngineGlyph } from '../components/Icons';
 import { useLanguage } from '../i18n';
 import { useToast } from '../ToastContext';
@@ -37,17 +37,6 @@ type UsageMetrics = {
     estimatedSavingsUsd: number;
 };
 
-const PROJECT_COLORS = [
-    '#ff6b2b', // orange (default)
-    '#ffaa00', // amber
-    '#22c55e', // green
-    '#14b8a6', // teal
-    '#3b82f6', // blue
-    '#8b5cf6', // purple
-    '#ec4899', // pink
-    '#ef4444', // red
-];
-
 export default function Dashboard() {
     const { t } = useLanguage();
     const navigate = useNavigate();
@@ -58,7 +47,6 @@ export default function Dashboard() {
     const [recentCalls, setRecentCalls] = useState<RecentCall[]>([]);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editName, setEditName] = useState('');
-    const [colorPickerId, setColorPickerId] = useState<string | null>(null);
     const [copiedKeyId, setCopiedKeyId] = useState<string | null>(null);
     const [hidingKeyId, setHidingKeyId] = useState<string | null>(null);
     const [usageMetrics, setUsageMetrics] = useState<UsageMetrics>({
@@ -67,6 +55,7 @@ export default function Dashboard() {
         estimatedSavingsUsd: 0,
     });
     const [copiedSnippet, setCopiedSnippet] = useState<string | null>(null);
+    const [activePopover, setActivePopover] = useState<'anthropic' | 'fusion' | 'ecosystem' | 'general' | null>(null);
 
     const handleCopySnippet = async (text: string, id: string) => {
         try {
@@ -267,10 +256,9 @@ export default function Dashboard() {
         e.preventDefault();
         setEditingId(p.id);
         setEditName(p.name);
-        setColorPickerId(null);
     };
 
-    const handleEditSave = async (id: string, e: React.MouseEvent | React.FormEvent) => {
+    const handleEditSave = async (id: string, e: React.SyntheticEvent) => {
         e.preventDefault();
         if (!editName.trim()) return;
         try {
@@ -282,19 +270,6 @@ export default function Dashboard() {
             toast.success('Project renamed');
             loadOverview(false);
         } catch { toast.error('Failed to rename project'); }
-    };
-
-    const handleColorChange = async (id: string, color: string, e: React.MouseEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        try {
-            await fetchApi(`/projects/${id}`, {
-                method: 'PATCH',
-                body: JSON.stringify({ color }),
-            });
-            setProjects(prev => prev.map(p => p.id === id ? { ...p, color } : p));
-            setColorPickerId(null);
-        } catch { console.error('Failed to change color'); }
     };
 
     if (loading) {
@@ -545,40 +520,95 @@ export default function Dashboard() {
 
             {/* ─── TierMax Superpowers & Modernized Architecture ─── */}
             <div className="superpowers-container">
-                <div className="superpowers-header">
-                    <div className="flex items-center gap-2">
-                        <TierMaxLogo size={18} />
-                        <h2 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0, letterSpacing: '-0.01em' }}>
+                <div className="superpowers-header" style={{ position: 'relative' }}>
+                    <div className="flex items-center gap-2" style={{ flexWrap: 'wrap' }}>
+                        <TierMaxLogo size={20} />
+                        <h2 style={{ fontSize: '1.15rem', fontWeight: 800, margin: 0, letterSpacing: '-0.01em', color: 'var(--text-primary)' }}>
                             TierMax Architecture & Protocols
                         </h2>
                         <span style={{
-                            fontSize: '0.62rem', fontWeight: 800, letterSpacing: '0.06em',
-                            background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.3)',
-                            color: '#22c55e', borderRadius: '4px', padding: '0.1rem 0.4rem',
+                            fontSize: '0.68rem', fontWeight: 800, letterSpacing: '0.06em',
+                            background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.35)',
+                            color: '#22c55e', borderRadius: '4px', padding: '0.15rem 0.45rem',
+                            display: 'inline-flex', alignItems: 'center', gap: '0.3rem'
                         }}>
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e' }} />
                             ACTIVE
                         </span>
+                        <button
+                            type="button"
+                            className="btn btn-secondary btn-icon"
+                            style={{ height: 26, width: 26, borderRadius: '50%', padding: 0 }}
+                            onMouseEnter={() => setActivePopover('general')}
+                            onMouseLeave={() => setActivePopover(null)}
+                            onClick={() => setActivePopover(activePopover === 'general' ? null : 'general')}
+                            title="Ver detalles de la arquitectura"
+                        >
+                            <HelpCircle size={14} style={{ color: 'var(--text-secondary)' }} />
+                        </button>
                     </div>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
                         Inspirado en arquitecturas de alto rendimiento (freellmapi) · Multi-Proveedor Inteligente
                     </span>
+
+                    {/* General Architecture Popover */}
+                    {activePopover === 'general' && (
+                        <div 
+                            className="protocol-popover" 
+                            style={{ top: 'calc(100% + 8px)', bottom: 'auto' }}
+                            onMouseEnter={() => setActivePopover('general')} 
+                            onMouseLeave={() => setActivePopover(null)}
+                        >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.5rem' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                                    <TierMaxLogo size={16} />
+                                    <span style={{ fontSize: '0.88rem', fontWeight: 800, color: 'var(--text-primary)' }}>Arquitectura TierMax SOAT</span>
+                                </div>
+                                <span style={{ fontSize: '0.65rem', padding: '0.15rem 0.45rem', borderRadius: '4px', background: 'rgba(34, 197, 94, 0.15)', color: '#22c55e', fontWeight: 700 }}>
+                                    High Performance
+                                </span>
+                            </div>
+                            <div>
+                                <div style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-primary)', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#38bdf8' }} />
+                                    ¿Qué es?
+                                </div>
+                                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
+                                    Infraestructura de proxy inteligente inspirada en freellmapi. Unifica en un único puerto protocolos OpenAI y Anthropic, balanceo de carga automático, circuit breakers anti-429 y consenso distribuido multi-modelo.
+                                </p>
+                            </div>
+                            <div>
+                                <div style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-primary)', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e' }} />
+                                    ¿Dónde se configura?
+                                </div>
+                                <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
+                                    Servidor central y puertos en <code>backend/src/index.ts</code>, variables globales en <code>backend/.env</code> y guía paso a paso en <strong>Ajustes &gt; Guía del Servidor</strong>.
+                                </p>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 <div className="superpowers-grid">
                     {/* Card 1: Anthropic Wire Protocol */}
-                    <div className="superpower-card">
+                    <div 
+                        className="superpower-card"
+                        onMouseEnter={() => setActivePopover('anthropic')}
+                        onMouseLeave={() => setActivePopover(null)}
+                    >
                         <div>
                             <div className="superpower-top">
                                 <div className="flex items-center gap-2">
-                                    <div className="superpower-icon-box" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}>
-                                        <AnthropicIcon size={17} />
+                                    <div className="superpower-icon-box">
+                                        <AnthropicIcon size={19} />
                                     </div>
                                     <div>
                                         <div className="superpower-title">Anthropic Wire Protocol</div>
-                                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>POST /v1/messages</div>
+                                        <div style={{ fontSize: '0.74rem', color: '#38bdf8', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>POST /v1/messages</div>
                                     </div>
                                 </div>
-                                <span className="superpower-badge" style={{ background: 'var(--surface-2)', color: 'var(--text-secondary)', border: '1px solid var(--border-default)' }}>
+                                <span className="superpower-badge" style={{ background: 'var(--surface-2)', color: 'var(--text-primary)', border: '1px solid var(--border-default)' }}>
                                     Native SSE
                                 </span>
                             </div>
@@ -586,35 +616,104 @@ export default function Dashboard() {
                                 Conexión directa con <strong>Claude Code CLI</strong>, <code>@anthropic-ai/sdk</code>, Aider y Cursor usando llaves <code>gk_...</code>. Streaming SSE estricto y mapeo bi-direccional.
                             </p>
                         </div>
-                        <div className="superpower-code-box">
-                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                export ANTHROPIC_BASE_URL="http://localhost:3000"
-                            </span>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                            <div className="superpower-code-box">
+                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    export ANTHROPIC_BASE_URL="http://localhost:3000"
+                                </span>
+                                <button
+                                    onClick={() => handleCopySnippet('export ANTHROPIC_BASE_URL="http://localhost:3000"', 'anthropic')}
+                                    className="btn btn-secondary btn-icon"
+                                    style={{ padding: '0.15rem 0.35rem', height: 24, width: 24, flexShrink: 0 }}
+                                    title="Copiar comando Claude Code"
+                                >
+                                    {copiedSnippet === 'anthropic' ? <Check size={12} style={{ color: '#22c55e' }} /> : <Copy size={12} />}
+                                </button>
+                            </div>
+
                             <button
-                                onClick={() => handleCopySnippet('export ANTHROPIC_BASE_URL="http://localhost:3000"', 'anthropic')}
-                                className="btn btn-secondary btn-icon"
-                                style={{ padding: '0.15rem 0.35rem', height: 24, width: 24, flexShrink: 0 }}
-                                title="Copiar comando Claude Code"
+                                type="button"
+                                className="btn btn-secondary"
+                                style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.35rem',
+                                    fontSize: '0.72rem',
+                                    fontWeight: 600,
+                                    padding: '0.3rem 0.6rem',
+                                    borderRadius: '6px',
+                                    cursor: 'pointer',
+                                    background: 'var(--surface-2)',
+                                    color: 'var(--text-secondary)'
+                                }}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActivePopover(activePopover === 'anthropic' ? null : 'anthropic');
+                                }}
                             >
-                                {copiedSnippet === 'anthropic' ? <Check size={12} style={{ color: '#22c55e' }} /> : <Copy size={12} />}
+                                <HelpCircle size={13} style={{ color: '#38bdf8' }} />
+                                <span>¿Qué es &amp; Dónde se configura?</span>
                             </button>
                         </div>
+
+                        {/* Anthropic Popover on Hover */}
+                        {activePopover === 'anthropic' && (
+                            <div 
+                                className="protocol-popover"
+                                onMouseEnter={() => setActivePopover('anthropic')}
+                                onMouseLeave={() => setActivePopover(null)}
+                            >
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.5rem' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                                        <AnthropicIcon size={16} />
+                                        <span style={{ fontSize: '0.88rem', fontWeight: 800, color: 'var(--text-primary)' }}>Anthropic Wire Protocol</span>
+                                    </div>
+                                    <span style={{ fontSize: '0.65rem', padding: '0.15rem 0.45rem', borderRadius: '4px', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', fontWeight: 700 }}>
+                                        POST /v1/messages
+                                    </span>
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-primary)', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#38bdf8' }} />
+                                        ¿Qué es?
+                                    </div>
+                                    <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
+                                        Emulación nativa 100% de la API de Anthropic Claude Messages. Permite conectar herramientas de desarrollo como <strong>Claude Code CLI</strong>, Cursor, Aider y cualquier script con <code>@anthropic-ai/sdk</code> directamente al Gateway sin modificar código.
+                                    </p>
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-primary)', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e' }} />
+                                        ¿Dónde se configura?
+                                    </div>
+                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.5, display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                                        <div>• <strong>En tu terminal:</strong> Configura <code>export ANTHROPIC_BASE_URL="http://localhost:3000"</code> y <code>export ANTHROPIC_API_KEY="gk_..."</code> generada en <strong>Proyectos &gt; API Keys</strong>.</div>
+                                        <div>• <strong>En el Gateway (código):</strong> Rutas y transformadores en <code>backend/src/api/routes/anthropic.ts</code>.</div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Card 2: Virtual Multi-Model Fusion */}
-                    <div className="superpower-card">
+                    <div 
+                        className="superpower-card"
+                        onMouseEnter={() => setActivePopover('fusion')}
+                        onMouseLeave={() => setActivePopover(null)}
+                    >
                         <div>
                             <div className="superpower-top">
                                 <div className="flex items-center gap-2">
-                                    <div className="superpower-icon-box" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}>
-                                        <RouterCascadeGlyph size={17} color="var(--text-secondary)" />
+                                    <div className="superpower-icon-box">
+                                        <RouterCascadeGlyph size={19} color="var(--text-primary)" />
                                     </div>
                                     <div>
                                         <div className="superpower-title">Virtual Consensus Fusion</div>
-                                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>model: "fusion"</div>
+                                        <div style={{ fontSize: '0.74rem', color: '#38bdf8', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>model: "fusion"</div>
                                     </div>
                                 </div>
-                                <span className="superpower-badge" style={{ background: 'var(--surface-2)', color: 'var(--status-healthy)', border: '1px solid var(--border-default)' }}>
+                                <span className="superpower-badge" style={{ background: 'rgba(34, 197, 94, 0.12)', color: '#22c55e', border: '1px solid rgba(34, 197, 94, 0.3)' }}>
                                     Consensus
                                 </span>
                             </div>
@@ -622,47 +721,181 @@ export default function Dashboard() {
                                 Despacho paralelo a 3 modelos heterogéneos activos + síntesis dialéctica con modelo juez anti-alucinaciones y telemetría transparente <code>_openclaw_fusion</code>.
                             </p>
                         </div>
-                        <div className="superpower-code-box">
-                            <span>"model": "fusion"</span>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                            <div className="superpower-code-box">
+                                <span>"model": "fusion"</span>
+                                <button
+                                    onClick={() => handleCopySnippet('"model": "fusion"', 'fusion')}
+                                    className="btn btn-secondary btn-icon"
+                                    style={{ padding: '0.15rem 0.35rem', height: 24, width: 24, flexShrink: 0 }}
+                                    title="Copiar nombre de modelo"
+                                >
+                                    {copiedSnippet === 'fusion' ? <Check size={12} style={{ color: '#22c55e' }} /> : <Copy size={12} />}
+                                </button>
+                            </div>
+
                             <button
-                                onClick={() => handleCopySnippet('"model": "fusion"', 'fusion')}
-                                className="btn btn-secondary btn-icon"
-                                style={{ padding: '0.15rem 0.35rem', height: 24, width: 24, flexShrink: 0 }}
-                                title="Copiar nombre de modelo"
+                                type="button"
+                                className="btn btn-secondary"
+                                style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.35rem',
+                                    fontSize: '0.72rem',
+                                    fontWeight: 600,
+                                    padding: '0.3rem 0.6rem',
+                                    borderRadius: '6px',
+                                    cursor: 'pointer',
+                                    background: 'var(--surface-2)',
+                                    color: 'var(--text-secondary)'
+                                }}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActivePopover(activePopover === 'fusion' ? null : 'fusion');
+                                }}
                             >
-                                {copiedSnippet === 'fusion' ? <Check size={12} style={{ color: '#22c55e' }} /> : <Copy size={12} />}
+                                <HelpCircle size={13} style={{ color: '#38bdf8' }} />
+                                <span>¿Qué es &amp; Dónde se configura?</span>
                             </button>
                         </div>
+
+                        {/* Fusion Popover on Hover */}
+                        {activePopover === 'fusion' && (
+                            <div 
+                                className="protocol-popover"
+                                onMouseEnter={() => setActivePopover('fusion')}
+                                onMouseLeave={() => setActivePopover(null)}
+                            >
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.5rem' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                                        <RouterCascadeGlyph size={16} color="var(--text-primary)" />
+                                        <span style={{ fontSize: '0.88rem', fontWeight: 800, color: 'var(--text-primary)' }}>Virtual Consensus Fusion</span>
+                                    </div>
+                                    <span style={{ fontSize: '0.65rem', padding: '0.15rem 0.45rem', borderRadius: '4px', background: 'rgba(34, 197, 94, 0.15)', color: '#22c55e', fontWeight: 700 }}>
+                                        Consensus Engine
+                                    </span>
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-primary)', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#38bdf8' }} />
+                                        ¿Qué es?
+                                    </div>
+                                    <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
+                                        Enrutamiento de consenso distribuido. Envía tu consulta en paralelo a 3 modelos LLM activos heterogéneos. Un modelo juez sintetiza las respuestas dialécticamente eliminando alucinaciones y entregando la respuesta óptima con telemetría <code>_openclaw_fusion</code>.
+                                    </p>
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-primary)', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e' }} />
+                                        ¿Dónde se configura?
+                                    </div>
+                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.5, display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                                        <div>• <strong>En tus peticiones:</strong> Usa el modelo <code>"model": "fusion"</code> en llamadas a <code>/v1/chat/completions</code> o <code>/v1/messages</code>.</div>
+                                        <div>• <strong>En el Gateway (código):</strong> Modelos del consenso, pesos y prompt del juez en <code>backend/src/services/router.ts</code>.</div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Card 3: Expanded Ecosystem */}
-                    <div className="superpower-card">
+                    <div 
+                        className="superpower-card"
+                        onMouseEnter={() => setActivePopover('ecosystem')}
+                        onMouseLeave={() => setActivePopover(null)}
+                    >
                         <div>
                             <div className="superpower-top">
                                 <div className="flex items-center gap-2">
-                                    <div className="superpower-icon-box" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}>
-                                        <DualEngineGlyph size={17} color="var(--text-secondary)" />
+                                    <div className="superpower-icon-box">
+                                        <DualEngineGlyph size={19} color="var(--text-primary)" />
                                     </div>
                                     <div>
-                                        <div className="superpower-title">Ecosistema & Modelos</div>
-                                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>16+ Proveedores</div>
+                                        <div className="superpower-title">Ecosistema &amp; Modelos</div>
+                                        <div style={{ fontSize: '0.74rem', color: '#38bdf8', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>16+ Proveedores</div>
                                     </div>
                                 </div>
-                                <span className="superpower-badge" style={{ background: 'var(--surface-2)', color: 'var(--text-secondary)', border: '1px solid var(--border-default)' }}>
+                                <span className="superpower-badge" style={{ background: 'var(--surface-2)', color: 'var(--text-primary)', border: '1px solid var(--border-default)' }}>
                                     Zero-Drop SOAT
                                 </span>
                             </div>
-                            <p className="superpower-desc" style={{ marginBottom: '0.5rem' }}>
+                            <p className="superpower-desc" style={{ marginBottom: '0.75rem' }}>
                                 Catálogo potenciado con <strong>Qwen 2.5</strong> (Groq), <strong>Kimi K3</strong> (Moonshot/NIM), <strong>MiniMax M3</strong> y <strong>DeepSeek Direct</strong> con auto-failover inteligente.
                             </p>
                         </div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginTop: 'auto' }}>
-                            <span style={{ fontSize: '0.65rem', background: 'rgba(245,80,54,0.12)', color: '#f55036', padding: '0.15rem 0.45rem', borderRadius: '4px', border: '1px solid rgba(245,80,54,0.25)', fontWeight: 600 }}>Groq</span>
-                            <span style={{ fontSize: '0.65rem', background: 'rgba(118,185,0,0.12)', color: '#76b900', padding: '0.15rem 0.45rem', borderRadius: '4px', border: '1px solid rgba(118,185,0,0.25)', fontWeight: 600 }}>NVIDIA NIM</span>
-                            <span style={{ fontSize: '0.65rem', background: 'rgba(77,159,255,0.12)', color: '#4d9fff', padding: '0.15rem 0.45rem', borderRadius: '4px', border: '1px solid rgba(77,159,255,0.25)', fontWeight: 600 }}>DeepSeek</span>
-                            <span style={{ fontSize: '0.65rem', background: 'rgba(0,212,212,0.12)', color: '#00d4d4', padding: '0.15rem 0.45rem', borderRadius: '4px', border: '1px solid rgba(0,212,212,0.25)', fontWeight: 600 }}>Moonshot Kimi</span>
-                            <span style={{ fontSize: '0.65rem', background: 'rgba(217,70,239,0.12)', color: '#d946ef', padding: '0.15rem 0.45rem', borderRadius: '4px', border: '1px solid rgba(217,70,239,0.25)', fontWeight: 600 }}>MiniMax AI</span>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                                <span style={{ fontSize: '0.7rem', background: 'rgba(245,80,54,0.18)', color: '#f87171', padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid rgba(245,80,54,0.35)', fontWeight: 700 }}>Groq</span>
+                                <span style={{ fontSize: '0.7rem', background: 'rgba(118,185,0,0.18)', color: '#84cc16', padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid rgba(118,185,0,0.35)', fontWeight: 700 }}>NVIDIA NIM</span>
+                                <span style={{ fontSize: '0.7rem', background: 'rgba(77,159,255,0.18)', color: '#60a5fa', padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid rgba(77,159,255,0.35)', fontWeight: 700 }}>DeepSeek</span>
+                                <span style={{ fontSize: '0.7rem', background: 'rgba(0,212,212,0.18)', color: '#2dd4bf', padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid rgba(0,212,212,0.35)', fontWeight: 700 }}>Moonshot Kimi</span>
+                                <span style={{ fontSize: '0.7rem', background: 'rgba(217,70,239,0.18)', color: '#e879f9', padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid rgba(217,70,239,0.35)', fontWeight: 700 }}>MiniMax AI</span>
+                            </div>
+
+                            <button
+                                type="button"
+                                className="btn btn-secondary"
+                                style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.35rem',
+                                    fontSize: '0.72rem',
+                                    fontWeight: 600,
+                                    padding: '0.3rem 0.6rem',
+                                    borderRadius: '6px',
+                                    cursor: 'pointer',
+                                    background: 'var(--surface-2)',
+                                    color: 'var(--text-secondary)'
+                                }}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActivePopover(activePopover === 'ecosystem' ? null : 'ecosystem');
+                                }}
+                            >
+                                <HelpCircle size={13} style={{ color: '#38bdf8' }} />
+                                <span>¿Qué es &amp; Dónde se configura?</span>
+                            </button>
                         </div>
+
+                        {/* Ecosystem Popover on Hover */}
+                        {activePopover === 'ecosystem' && (
+                            <div 
+                                className="protocol-popover"
+                                onMouseEnter={() => setActivePopover('ecosystem')}
+                                onMouseLeave={() => setActivePopover(null)}
+                            >
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.5rem' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                                        <DualEngineGlyph size={16} color="var(--text-primary)" />
+                                        <span style={{ fontSize: '0.88rem', fontWeight: 800, color: 'var(--text-primary)' }}>Ecosistema Multi-Proveedor &amp; SOAT</span>
+                                    </div>
+                                    <span style={{ fontSize: '0.65rem', padding: '0.15rem 0.45rem', borderRadius: '4px', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', fontWeight: 700 }}>
+                                        16+ Providers
+                                    </span>
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-primary)', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#38bdf8' }} />
+                                        ¿Qué es?
+                                    </div>
+                                    <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
+                                        Capa de abstracción y balanceo de carga entre más de 16 proveedores. Ante cualquier error 429 de límite de cuota o fallo de red, se activa el conmutador por error (auto-failover) de forma transparente sin interrumpir las aplicaciones cliente.
+                                    </p>
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-primary)', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e' }} />
+                                        ¿Dónde se configura?
+                                    </div>
+                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.5, display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                                        <div>• <strong>Variables de Entorno:</strong> En <code>backend/.env</code> (<code>GROQ_API_KEY</code>, <code>NVIDIA_NIM_API_KEY</code>, <code>DEEPSEEK_API_KEY</code>, etc.).</div>
+                                        <div>• <strong>En el Gateway (código):</strong> Balanceadores, circuit breakers y selección en <code>backend/src/services/providers.ts</code>.</div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
@@ -685,21 +918,32 @@ export default function Dashboard() {
                     </div>
                 ) : (
                     projects.map(p => {
-                        const projColor = p.color || '#ff6b2b';
                         return (
                             <Link
                                 to={`/projects/${p.id}`}
                                 key={p.id}
                                 className="project-card"
-                                style={{ '--project-color': projColor } as any}
                                 onClick={e => {
-                                    // Prevent navigation when interacting with color/edit controls
+                                    // Prevent navigation when interacting with controls
                                     if ((e.target as HTMLElement).closest('.card-actions')) e.preventDefault();
                                 }}
                             >
                                 {/* Card header */}
-                                <div className="flex items-center gap-2" style={{ marginBottom: '0.75rem' }}>
-                                    <div className="project-color-dot" style={{ background: projColor, boxShadow: `0 0 8px ${projColor}60` }} />
+                                <div className="flex items-center gap-2" style={{ marginBottom: '0.85rem' }}>
+                                    <div style={{
+                                        width: 32,
+                                        height: 32,
+                                        borderRadius: '8px',
+                                        background: 'var(--surface-2)',
+                                        border: '1px solid var(--border-subtle)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        color: 'var(--text-secondary)',
+                                        flexShrink: 0
+                                    }}>
+                                        <FolderOpen size={16} />
+                                    </div>
 
                                     {editingId === p.id ? (
                                         <div className="flex items-center gap-2 card-actions" style={{ flex: 1 }}
@@ -709,41 +953,26 @@ export default function Dashboard() {
                                                 value={editName}
                                                 onChange={e => setEditName(e.target.value)}
                                                 autoFocus
-                                                onKeyDown={e => { if (e.key === 'Enter') handleEditSave(p.id, e as any); if (e.key === 'Escape') setEditingId(null); }}
-                                                style={{ flex: 1, padding: '0.3rem 0.6rem', fontSize: '0.85rem', marginBottom: 0, borderColor: projColor }}
+                                                onKeyDown={e => { if (e.key === 'Enter') handleEditSave(p.id, e); if (e.key === 'Escape') setEditingId(null); }}
+                                                style={{ flex: 1, padding: '0.3rem 0.6rem', fontSize: '0.85rem', marginBottom: 0 }}
                                             />
                                             <button onClick={e => handleEditSave(p.id, e)} className="ctx-edit-save" title="Save">✓</button>
                                             <button onClick={e => { e.preventDefault(); setEditingId(null); }} className="ctx-edit-cancel" title="Cancel">✕</button>
                                         </div>
                                     ) : (
-                                        <h3 className="project-title-text">
+                                        <h3 className="project-title-text" style={{ fontSize: '1.02rem', fontWeight: 700, color: 'var(--text-primary)' }}>
                                             {p.name}
                                         </h3>
                                     )}
                                 </div>
-
-                                {/* Color picker */}
-                                {colorPickerId === p.id && (
-                                    <div className="color-picker-row card-actions" onClick={e => e.preventDefault()} style={{ marginBottom: '0.75rem' }}>
-                                        {PROJECT_COLORS.map(c => (
-                                            <button
-                                                key={c}
-                                                className={`color-swatch${projColor === c ? ' active' : ''}`}
-                                                style={{ background: c }}
-                                                onClick={e => handleColorChange(p.id, c, e)}
-                                                title={c}
-                                            />
-                                        ))}
-                                    </div>
-                                )}
 
                                 {/* Gateway Key Previews */}
                                 {p.gateway_keys && p.gateway_keys.length > 0 && (
                                     <div style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
                                         {p.gateway_keys.map(gk => (
                                             <div key={gk.id} className="card-actions" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                                <Key size={10} style={{ color: projColor, flexShrink: 0 }} />
-                                                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-secondary)', background: 'var(--surface-2, rgba(0,0,0,0.04))', border: '1px solid var(--glass-border)', borderRadius: '4px', padding: '0.1rem 0.4rem', letterSpacing: '0.04em', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                <Key size={11} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                                                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-secondary)', background: 'var(--surface-2)', border: '1px solid var(--border-subtle)', borderRadius: '4px', padding: '0.15rem 0.45rem', letterSpacing: '0.04em', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                                     {gk.key_preview}
                                                 </span>
                                                 {gk.key_name && (
@@ -756,8 +985,8 @@ export default function Dashboard() {
                                                     title={copiedKeyId === gk.id ? 'Copied!' : 'Copy API key'}
                                                     style={{
                                                         position: 'relative',
-                                                        background: copiedKeyId === gk.id ? 'rgba(34,197,94,0.15)' : 'var(--surface-2, rgba(0,0,0,0.04))',
-                                                        border: `1px solid ${copiedKeyId === gk.id ? 'rgba(34,197,94,0.3)' : 'var(--glass-border)'}`,
+                                                        background: copiedKeyId === gk.id ? 'rgba(34,197,94,0.15)' : 'var(--surface-2)',
+                                                        border: `1px solid ${copiedKeyId === gk.id ? 'rgba(34,197,94,0.3)' : 'var(--border-subtle)'}`,
                                                         cursor: 'pointer',
                                                         color: copiedKeyId === gk.id ? '#22c55e' : 'var(--text-secondary)',
                                                         padding: '0.2rem 0.35rem',
@@ -783,10 +1012,10 @@ export default function Dashboard() {
                                 )}
 
                                 {/* Footer */}
-                                <div className="flex items-center justify-between card-actions" style={{ marginTop: '0.75rem' }}>
+                                <div className="flex items-center justify-between card-actions" style={{ marginTop: '0.85rem' }}>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0, fontFamily: 'var(--font-mono)', fontWeight: 500 }}>
+                                            <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: 0, fontFamily: 'var(--font-mono)', fontWeight: 500 }}>
                                                 {new Date(p.created_at).toLocaleDateString()}
                                             </p>
                                             {p.avg_latency_ms != null && (
@@ -823,31 +1052,22 @@ export default function Dashboard() {
 
                                     <div className="flex gap-1" onClick={e => e.preventDefault()}>
                                         <button
-                                            onClick={e => { e.preventDefault(); setColorPickerId(colorPickerId === p.id ? null : p.id); setEditingId(null); }}
-                                            title="Change color"
-                                            style={{ background: 'var(--surface-2, rgba(0,0,0,0.04))', border: '1px solid var(--glass-border)', cursor: 'pointer', color: 'var(--text-primary)', padding: '0.35rem', borderRadius: '6px', transition: 'all 0.15s', display: 'flex', alignItems: 'center' }}
-                                            onMouseEnter={e => { e.currentTarget.style.color = projColor; e.currentTarget.style.background = 'var(--surface-hover, rgba(0,0,0,0.08))'; }}
-                                            onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.background = 'var(--surface-2, rgba(0,0,0,0.04))'; }}
-                                        >
-                                            <Palette size={14} />
-                                        </button>
-                                        <button
                                             onClick={e => handleEditStart(p, e)}
                                             title="Rename"
-                                            style={{ background: 'var(--surface-2, rgba(0,0,0,0.04))', border: '1px solid var(--glass-border)', cursor: 'pointer', color: 'var(--text-primary)', padding: '0.35rem', borderRadius: '6px', transition: 'all 0.15s', display: 'flex', alignItems: 'center' }}
-                                            onMouseEnter={e => { e.currentTarget.style.color = 'var(--brand-amber)'; e.currentTarget.style.background = 'var(--surface-hover, rgba(0,0,0,0.08))'; }}
-                                            onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.background = 'var(--surface-2, rgba(0,0,0,0.04))'; }}
+                                            style={{ background: 'var(--surface-2)', border: '1px solid var(--border-subtle)', cursor: 'pointer', color: 'var(--text-secondary)', padding: '0.35rem', borderRadius: '6px', transition: 'all 0.15s', display: 'flex', alignItems: 'center' }}
+                                            onMouseEnter={e => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.borderColor = 'var(--border-default)'; }}
+                                            onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.borderColor = 'var(--border-subtle)'; }}
                                         >
-                                            <Edit2 size={14} />
+                                            <Edit2 size={13} />
                                         </button>
                                         <button
                                             onClick={e => handleDelete(p.id, e)}
                                             title="Delete project"
-                                            style={{ background: 'var(--surface-2, rgba(0,0,0,0.04))', border: '1px solid var(--glass-border)', cursor: 'pointer', color: 'var(--text-primary)', padding: '0.35rem', borderRadius: '6px', transition: 'all 0.15s', display: 'flex', alignItems: 'center' }}
+                                            style={{ background: 'var(--surface-2)', border: '1px solid var(--border-subtle)', cursor: 'pointer', color: 'var(--text-secondary)', padding: '0.35rem', borderRadius: '6px', transition: 'all 0.15s', display: 'flex', alignItems: 'center' }}
                                             onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.background = 'rgba(239,68,68,0.15)'; e.currentTarget.style.borderColor = 'rgba(239,68,68,0.3)'; }}
-                                            onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.background = 'var(--surface-2, rgba(0,0,0,0.04))'; e.currentTarget.style.borderColor = 'var(--glass-border)'; }}
+                                            onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.background = 'var(--surface-2)'; e.currentTarget.style.borderColor = 'var(--border-subtle)'; }}
                                         >
-                                            <Trash2 size={14} />
+                                            <Trash2 size={13} />
                                         </button>
                                     </div>
                                 </div>
