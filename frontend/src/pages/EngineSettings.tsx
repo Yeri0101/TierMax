@@ -21,6 +21,7 @@ interface EngineConfig {
     fusionDefaultModels?: string[];
     fusionDefaultJudge?: string;
     fusionSlotProjects?: string[];
+    strictFreeTierMode?: boolean;
 }
 
 const PROVIDER_BASE_URLS: Record<string, string> = {
@@ -317,10 +318,17 @@ export default function EngineSettings() {
         const newManual: boolean[] = [false, false, false, false];
         const usedPaidProjectIds = new Set<string>();
 
-        // Anti-Monopoly: Sort projects so FREE projects come strictly before PAID/PREMIUM projects
+        // Pure dynamic billing: project is paid if it has keys and none are free
+        const isProjectPurelyPaid = (proj: any) => {
+            const pKeys = allKeys.filter((k: any) => k.project_id === proj.id);
+            if (pKeys.length === 0) return proj.billing_type === 'paid';
+            return !pKeys.some((k: any) => k.billing_type === 'free');
+        };
+
+        // Anti-Monopoly: Sort projects so FREE projects come strictly before purely PAID projects
         const sortedProjects = [...projects].sort((a: any, b: any) => {
-            const aPaid = (a.billing_type === 'paid') || (a.name || '').toLowerCase().includes('prim');
-            const bPaid = (b.billing_type === 'paid') || (b.name || '').toLowerCase().includes('prim');
+            const aPaid = isProjectPurelyPaid(a);
+            const bPaid = isProjectPurelyPaid(b);
             if (aPaid !== bPaid) return aPaid ? 1 : -1;
             return 0;
         });
@@ -328,33 +336,35 @@ export default function EngineSettings() {
         for (let i = 0; i < 4; i++) {
             const targetProv = preferredProviders[i];
             let matchedProject = sortedProjects.find((proj: any) => {
-                const isPaid = (proj.billing_type === 'paid') || (proj.name || '').toLowerCase().includes('prim');
-                if (isPaid && usedPaidProjectIds.has(proj.id)) return false;
+                const isPaid = isProjectPurelyPaid(proj);
+                if (isPaid && (config.strictFreeTierMode || usedPaidProjectIds.has(proj.id))) return false;
                 const pKeys = allKeys.filter((k: any) => k.project_id === proj.id);
-                return pKeys.some((k: any) => (k.provider || '').toLowerCase() === targetProv);
+                return pKeys.some((k: any) => (k.provider || '').toLowerCase() === targetProv && (!config.strictFreeTierMode || k.billing_type === 'free'));
             });
             if (!matchedProject) {
                 matchedProject = sortedProjects.find((proj: any) => {
-                    const isPaid = (proj.billing_type === 'paid') || (proj.name || '').toLowerCase().includes('prim');
-                    if (isPaid && usedPaidProjectIds.has(proj.id)) return false;
-                    return (proj.name || '').toLowerCase().includes(targetProv);
+                    const isPaid = isProjectPurelyPaid(proj);
+                    if (isPaid && (config.strictFreeTierMode || usedPaidProjectIds.has(proj.id))) return false;
+                    const pKeys = allKeys.filter((k: any) => k.project_id === proj.id);
+                    return (proj.name || '').toLowerCase().includes(targetProv) && (!config.strictFreeTierMode || pKeys.some((k: any) => k.billing_type === 'free'));
                 });
             }
             if (!matchedProject && (targetProv === 'google' || targetProv === 'openai' || targetProv === 'moonshot' || targetProv === 'zhipu' || targetProv === 'nvidia' || targetProv === 'puter')) {
                 matchedProject = sortedProjects.find((proj: any) => {
-                    const isPaid = (proj.billing_type === 'paid') || (proj.name || '').toLowerCase().includes('prim');
-                    if (isPaid && usedPaidProjectIds.has(proj.id)) return false;
+                    const isPaid = isProjectPurelyPaid(proj);
+                    if (isPaid && (config.strictFreeTierMode || usedPaidProjectIds.has(proj.id))) return false;
                     const pKeys = allKeys.filter((k: any) => k.project_id === proj.id);
-                    return pKeys.some((k: any) => (k.provider || '').toLowerCase() === 'openrouter');
+                    return pKeys.some((k: any) => (k.provider || '').toLowerCase() === 'openrouter' && (!config.strictFreeTierMode || k.billing_type === 'free'));
                 }) || sortedProjects.find((proj: any) => {
-                    const isPaid = (proj.billing_type === 'paid') || (proj.name || '').toLowerCase().includes('prim');
-                    if (isPaid && usedPaidProjectIds.has(proj.id)) return false;
-                    return (proj.name || '').toLowerCase().includes('open router') || (proj.name || '').toLowerCase().includes('openrouter');
+                    const isPaid = isProjectPurelyPaid(proj);
+                    if (isPaid && (config.strictFreeTierMode || usedPaidProjectIds.has(proj.id))) return false;
+                    const pKeys = allKeys.filter((k: any) => k.project_id === proj.id);
+                    return ((proj.name || '').toLowerCase().includes('open router') || (proj.name || '').toLowerCase().includes('openrouter')) && (!config.strictFreeTierMode || pKeys.some((k: any) => k.billing_type === 'free'));
                 });
             }
 
             if (matchedProject) {
-                const isPaid = (matchedProject.billing_type === 'paid') || (matchedProject.name || '').toLowerCase().includes('prim');
+                const isPaid = isProjectPurelyPaid(matchedProject);
                 if (isPaid) {
                     usedPaidProjectIds.add(matchedProject.id);
                 }
@@ -506,6 +516,24 @@ export default function EngineSettings() {
             }));
             setApiModels([]);
             handleProviderPreset(prov);
+        }
+    };
+
+    const handleToggleStrictFreeTierMode = async () => {
+        const nextVal = !(config.strictFreeTierMode ?? true);
+        const updatedConfig = { ...config, strictFreeTierMode: nextVal };
+        setConfig(updatedConfig);
+        try {
+            await fetchApi('/engine/config', {
+                method: 'POST',
+                body: JSON.stringify({ strictFreeTierMode: nextVal }),
+            });
+            setSaveSuccess(nextVal 
+                ? (t('engine.strict_free_mode_desc_active') ? 'Modo Gratuito Estricto activado (100% Gratis)' : 'Strict Free Mode enabled')
+                : 'Modo Híbrido activado (Llaves de pago como último recurso)');
+            setTimeout(() => setSaveSuccess(''), 4000);
+        } catch (e: any) {
+            setSaveError(e.message || 'Error al actualizar Modo Gratuito');
         }
     };
 
@@ -720,6 +748,80 @@ export default function EngineSettings() {
                     <span>{saveError}</span>
                 </div>
             )}
+
+            {/* Zero-Cost Policy / Modo Gratuito Estricto Card */}
+            <div className="glass-panel" style={{
+                padding: '1.25rem 1.5rem',
+                borderRadius: '12px',
+                border: (config.strictFreeTierMode ?? true) ? '1px solid rgba(34,197,94,0.35)' : '1px solid var(--border-subtle)',
+                background: (config.strictFreeTierMode ?? true) ? 'rgba(34,197,94,0.04)' : 'var(--surface-1)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '1.25rem',
+                flexWrap: 'wrap'
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+                    <div style={{
+                        width: 44,
+                        height: 44,
+                        borderRadius: 10,
+                        background: (config.strictFreeTierMode ?? true) ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.12)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: (config.strictFreeTierMode ?? true) ? '#22c55e' : '#ef4444',
+                        fontSize: '1.4rem'
+                    }}>
+                        {(config.strictFreeTierMode ?? true) ? '🛡️' : '💳'}
+                    </div>
+                    <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+                            <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800 }}>
+                                {t('engine.strict_free_mode_title') || 'Modo Gratuito Estricto (Zero-Cost Policy)'}
+                            </h3>
+                            <span style={{
+                                padding: '0.15rem 0.55rem',
+                                borderRadius: 'var(--radius-pill)',
+                                fontSize: '0.7rem',
+                                fontWeight: 800,
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.04em',
+                                background: (config.strictFreeTierMode ?? true) ? 'rgba(34,197,94,0.2)' : 'rgba(255,170,0,0.18)',
+                                color: (config.strictFreeTierMode ?? true) ? '#22c55e' : 'var(--brand-amber)',
+                                border: `1px solid ${(config.strictFreeTierMode ?? true) ? 'rgba(34,197,94,0.35)' : 'rgba(255,170,0,0.35)'}`
+                            }}>
+                                {(config.strictFreeTierMode ?? true) ? (t('engine.strict_free_active') || 'ACTIVO (100% Gratis)') : (t('engine.strict_free_inactive') || 'MODO HÍBRIDO (De Pago como Último Recurso)')}
+                            </span>
+                        </div>
+                        <p style={{ margin: '0.35rem 0 0', color: 'var(--text-muted)', fontSize: '0.82rem', lineHeight: 1.45, maxWidth: '780px' }}>
+                            {(config.strictFreeTierMode ?? true)
+                                ? (t('engine.strict_free_mode_desc_active') || 'El gateway bloqueará estrictamente cualquier petición dirigida a llaves o proveedores de pago. Solo se utilizarán llaves etiquetadas como Gratis (billing_type = free) garantizando cero gasto financiero.')
+                                : (t('engine.strict_free_mode_desc_inactive') || 'Las llaves gratuitas se priorizan en rotación round-robin. Las llaves de pago solo se utilizarán como último recurso si las gratuitas se agotan o fallan.')}
+                        </p>
+                    </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <button
+                        type="button"
+                        onClick={handleToggleStrictFreeTierMode}
+                        className={`btn ${(config.strictFreeTierMode ?? true) ? 'btn-success' : 'btn-secondary'}`}
+                        style={{
+                            padding: '0.55rem 1.25rem',
+                            fontSize: '0.85rem',
+                            fontWeight: 700,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            borderRadius: '8px',
+                            cursor: 'pointer'
+                        }}
+                    >
+                        <span>{(config.strictFreeTierMode ?? true) ? '⚡ ' + (t('engine.btn_disable_strict_free') || 'Desactivar Modo Estricto') : '🛡️ ' + (t('engine.btn_enable_strict_free') || 'Activar Modo Gratuito Estricto')}</span>
+                    </button>
+                </div>
+            </div>
 
             {/* Dual Engine Cards Grid */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(440px, 1fr))', gap: '1.5rem' }}>
@@ -1182,7 +1284,7 @@ export default function EngineSettings() {
                                 const projKeys = upstreamKeys.filter((k: any) => k.project_id === proj.id);
                                 if (projKeys.length === 0) return null;
                                 const prov = projKeys[0]?.provider?.toUpperCase() || 'CANAL';
-                                const isPaid = (proj.billing_type === 'paid') || (proj.name || '').toLowerCase().includes('prim');
+                                const isPaid = projKeys.length > 0 && projKeys.every((k: any) => k.billing_type === 'paid');
                                 const badge = isPaid ? '💳 Premium' : '⚡ Gratis';
                                 return (
                                     <option key={`apply:${proj.id}`} value={`project:${proj.id}`}>
@@ -1270,7 +1372,7 @@ export default function EngineSettings() {
                                                 const projKeys = upstreamKeys.filter((k: any) => k.project_id === proj.id);
                                                 if (projKeys.length === 0) return null;
                                                 const prov = projKeys[0]?.provider?.toUpperCase() || 'CANAL';
-                                                const isPaid = (proj.billing_type === 'paid') || (proj.name || '').toLowerCase().includes('prim');
+                                                const isPaid = projKeys.every((k: any) => k.billing_type === 'paid');
                                                 const badge = isPaid ? '💳 Premium' : '⚡ Gratis';
                                                 return (
                                                     <option key={`fproj:${proj.id}`} value={`project:${proj.id}`}>
@@ -1283,7 +1385,7 @@ export default function EngineSettings() {
                                             {projects.map((proj: any) => {
                                                 const projKeys = upstreamKeys.filter((k: any) => k.project_id === proj.id);
                                                 return projKeys.map((k: any, idx: number) => {
-                                                    const isKeyPaid = (k.billing_type === 'paid') || (proj.name || '').toLowerCase().includes('prim');
+                                                    const isKeyPaid = k.billing_type === 'paid';
                                                     const keyBadge = isKeyPaid ? '💳 Premium' : '⚡ Gratis';
                                                     return (
                                                         <option key={`fkey:${k.id}`} value={`key:${k.id}`}>

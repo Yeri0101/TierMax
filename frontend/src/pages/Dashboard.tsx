@@ -90,11 +90,34 @@ export default function Dashboard() {
     const [newCallHighlight, setNewCallHighlight] = useState(false);
     const [isInspectorOpen, setIsInspectorOpen] = useState(false);
     const [cacheStats, setCacheStats] = useState<any>(null);
+    const [strictFreeMode, setStrictFreeMode] = useState<boolean>(true);
+
+    const toggleStrictFreeMode = async () => {
+        const nextVal = !strictFreeMode;
+        setStrictFreeMode(nextVal);
+        try {
+            await fetchApi('/engine/config', {
+                method: 'POST',
+                body: JSON.stringify({ strictFreeTierMode: nextVal }),
+            });
+            toast.success(nextVal
+                ? '⚡ Modo Gratuito Estricto: ACTIVO (100% Gratis)'
+                : '💳 Modo Híbrido: ACTIVO (De Pago como Último Recurso)');
+        } catch (e: any) {
+            toast.error(e.message || 'Error al cambiar Modo Gratuito');
+            setStrictFreeMode(!nextVal);
+        }
+    };
 
     const loadOverview = async (silent = false) => {
         try {
             if (!silent) setLoading(true);
             fetchApi('/analytics/cache-stats').then(setCacheStats).catch(() => {});
+            fetchApi('/engine/config').then(cfg => {
+                if (cfg && typeof cfg.strictFreeTierMode === 'boolean') {
+                    setStrictFreeMode(cfg.strictFreeTierMode);
+                }
+            }).catch(() => {});
             const overview = await fetchApi('/projects/dashboard-overview');
             if (overview) {
                 if (Array.isArray(overview.projects)) setProjects(overview.projects);
@@ -385,6 +408,28 @@ export default function Dashboard() {
 
                 <div className="recent-calls-panel">
                     <div className="flex items-center gap-2" style={{ marginBottom: '0.5rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                        <button
+                            type="button"
+                            onClick={toggleStrictFreeMode}
+                            title={strictFreeMode ? "Modo Gratuito Estricto: ACTIVO (100% Gratis). Clic para cambiar a Modo Híbrido." : "Modo Híbrido: Llaves de pago permitidas como último recurso. Clic para activar Modo Gratuito Estricto."}
+                            style={{
+                                padding: '0.18rem 0.6rem',
+                                fontSize: '0.68rem',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.35rem',
+                                borderRadius: 'var(--radius-pill)',
+                                background: strictFreeMode ? 'rgba(34,197,94,0.12)' : 'rgba(255,170,0,0.12)',
+                                border: `1px solid ${strictFreeMode ? 'rgba(34,197,94,0.3)' : 'rgba(255,170,0,0.3)'}`,
+                                color: strictFreeMode ? '#22c55e' : 'var(--brand-amber)',
+                                cursor: 'pointer',
+                                fontWeight: 700,
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.04em'
+                            }}
+                        >
+                            <span>{strictFreeMode ? '⚡ MODO GRATUITO' : '💳 MODO HÍBRIDO'}</span>
+                        </button>
                         <button
                             onClick={() => setIsInspectorOpen(true)}
                             className="btn btn-secondary"

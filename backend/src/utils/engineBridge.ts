@@ -42,6 +42,9 @@ export interface EngineConfig {
     fusionDefaultModels?: string[];
     fusionDefaultJudge?: string;
     fusionSlotProjects?: string[];
+
+    // System 4: Zero-Cost Policy Guard
+    strictFreeTierMode?: boolean;
 }
 
 const DEFAULT_ENGINE_CONFIG: EngineConfig = {
@@ -66,6 +69,7 @@ const DEFAULT_ENGINE_CONFIG: EngineConfig = {
         'project:80dec66d-eb1d-4ddf-bada-8a0ab6a6035d',
         'project:48141bdc-fe82-43f5-a328-3f95d12c5523'
     ],
+    strictFreeTierMode: true,
 };
 
 let currentConfig: EngineConfig = { ...DEFAULT_ENGINE_CONFIG };

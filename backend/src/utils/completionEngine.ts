@@ -13,7 +13,7 @@ import {
     markRateLimitExceeded,
     getOrCreateKeyState
 } from './freeTierGuardian';
-import { consultSystemOne } from './engineBridge';
+import { consultSystemOne, getEngineConfig } from './engineBridge';
 import { resolveModelOrHeal, HealingResult } from './modelHealing';
 import { notifyNewRequest } from './dashboardEvents';
 import { canPassCircuit, recordCircuitSuccess, recordCircuitFailure } from './circuitBreaker';
@@ -868,6 +868,50 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
         }
     }
 
+    const engineConfig = getEngineConfig(false);
+    const isStrictFree = engineConfig?.strictFreeTierMode ?? true;
+
+    // Free-Tier Expansion: If all candidates are paid OR strictFreeTierMode is active,
+    // discover any equivalent free keys in the gateway for candidate providers to avoid charges!
+    const hasFreeInitial = viableCandidates.some((cand: any) => cand.billing_type === 'free');
+    if (!hasFreeInitial || isStrictFree) {
+        const candidateProviders = Array.from(new Set(viableCandidates.map((cand: any) => cand.provider)));
+        const { data: allFreeKeys } = await supabase
+            .from('upstream_keys')
+            .select('id, provider, billing_type, project_id')
+            .eq('billing_type', 'free');
+
+        const viableFreeKeys = (allFreeKeys || []).filter((k: any) => {
+            if (fusionExcludedKeys.includes(k.id)) return false;
+            if (k.project_id && fusionExcludedProjects.includes(k.project_id)) return false;
+            if (checkAndRecoverProvider(k.id) === 'paused') return false;
+            return candidateProviders.includes(k.provider) || k.provider === 'openrouter';
+        });
+
+        if (viableFreeKeys.length > 0) {
+            console.log(`[CompletionEngine] Free-Tier Expansion: Discovered ${viableFreeKeys.length} free upstream keys to avoid paid charges.`);
+            const freeCandidateObjects = viableFreeKeys.map((k: any) => ({
+                upstream_key_id: k.id,
+                model_name: requestedModel,
+                upstream_model_name: null,
+                provider: k.provider,
+                billing_type: 'free',
+                project_id: k.project_id,
+            }));
+            const existingIds = new Set(viableCandidates.map((cand: any) => cand.upstream_key_id));
+            const newFree = freeCandidateObjects.filter((cand: any) => !existingIds.has(cand.upstream_key_id));
+            viableCandidates = [...newFree, ...viableCandidates];
+        }
+    }
+
+    // Strict Free-Tier Mode: Completely purge any paid candidates if strict mode is active
+    if (isStrictFree) {
+        viableCandidates = viableCandidates.filter((cand: any) => cand.billing_type === 'free');
+        if (viableCandidates.length === 0) {
+            console.warn(`[StrictFreeTierMode] Model '${requestedModel}' has no available free upstream keys. Paid keys are locked out by Strict Free Mode.`);
+        }
+    }
+
     const estimatedTok = estimateTokenCount(body.messages || [], body.tools || []);
     const jevDecision = await consultSystemOne({
         messages: body.messages || [],
@@ -883,7 +927,7 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
     candidates = filterCandidatesByTier(routingTier, viableCandidates);
 
     // Free Tier Priority Engine: Separate free tier keys and paid/premium keys.
-    // Free keys are rotated via round-robin; paid keys are placed strictly as secondary fallbacks!
+    // Free keys are rotated via round-robin; paid keys are placed strictly as the ABSOLUTE LAST RESORT!
     const freeCandidates = candidates.filter((cand: any) => cand.billing_type === 'free');
     const paidCandidates = candidates.filter((cand: any) => cand.billing_type !== 'free');
 
@@ -896,24 +940,32 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
         const freeStartIndex = modelCounters[counterKey] % freeCandidates.length;
         modelCounters[counterKey]++;
         const rotatedFree = freeCandidates.map((_: any, i: number) => freeCandidates[(freeStartIndex + i) % freeCandidates.length]);
-        candidates = [...rotatedFree, ...paidCandidates];
-    } else if (paidCandidates.length > 0) {
+        // If Strict Free Mode is enabled, do NOT attach paid candidates at all!
+        // If disabled, paid candidates are attached strictly at the end as secondary fallback.
+        candidates = isStrictFree ? rotatedFree : [...rotatedFree, ...paidCandidates];
+    } else if (paidCandidates.length > 0 && !isStrictFree) {
         const paidStartIndex = modelCounters[counterKey] % paidCandidates.length;
         modelCounters[counterKey]++;
         candidates = paidCandidates.map((_: any, i: number) => paidCandidates[(paidStartIndex + i) % paidCandidates.length]);
+    } else {
+        candidates = [];
     }
 
     const tsRouter = new Date().toISOString();
-    console.log(`[${tsRouter}] [DualEngine] tier=${routingTier} engine=${jevDecision.decisionSource} confidence=${jevDecision.confidenceScore}% estimatedTokens=${estimatedTok} candidatesAfterFilter=${candidates.length}/${enrichedCandidates.length} (free=${freeCandidates.length}, paid=${paidCandidates.length})`);
+    console.log(`[${tsRouter}] [DualEngine] tier=${routingTier} engine=${jevDecision.decisionSource} confidence=${jevDecision.confidenceScore}% estimatedTokens=${estimatedTok} candidatesAfterFilter=${candidates.length}/${enrichedCandidates.length} (free=${freeCandidates.length}, paid=${paidCandidates.length}, strictFree=${isStrictFree})`);
 
     if (c) {
         c.header('X-TierMax-Engine', jevDecision.decisionSource);
         c.header('X-TierMax-Tier', routingTier);
         c.header('X-TierMax-Confidence', `${jevDecision.confidenceScore}`);
+        c.header('X-TierMax-Strict-Free', String(isStrictFree));
     }
 
     if (candidates.length === 0) {
-        const errObj = { error: { message: `Model ${requestedModel} is not available.`, type: "invalid_request_error" } };
+        const errMsg = isStrictFree
+            ? `Gateway (Modo Gratuito Estricto): El modelo '${requestedModel}' solo está disponible en proveedores de pago y el Modo Gratuito Estricto está activo. Desactiva el Modo Gratuito o usa un modelo soportado por proveedores gratuitos.`
+            : `Model ${requestedModel} is not available.`;
+        const errObj = { error: { message: errMsg, type: "invalid_request_error" } };
         if (c && !isInternalCall && !returnRawStream) {
             return c.json(errObj, 403);
         }

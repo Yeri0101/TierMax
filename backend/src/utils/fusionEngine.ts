@@ -195,29 +195,43 @@ export async function executeFusion(options: FusionExecuteOptions): Promise<{
     const engineConfig = getEngineConfig(false);
     const slotProjects = engineConfig?.fusionSlotProjects || [];
 
+    const isStrictFree = engineConfig?.strictFreeTierMode ?? true;
+
     // Query upstream keys to enforce Anti-Monopoly & Paid Key Deduplication for Consensus Fusion
     const { data: allUpstreamKeys } = await supabase
         .from('upstream_keys')
-        .select('id, project_id, provider, billing_type, projects(name)');
+        .select('id, project_id, provider, billing_type');
 
     const isPaidKey = (k: any) => {
         if (!k) return false;
-        if (k.billing_type === 'paid') return true;
-        const name = (k.projects?.name || '').toLowerCase();
-        return name.includes('prim') || name.includes('premium');
+        return k.billing_type === 'paid';
+    };
+
+    const isFreeKey = (k: any) => {
+        if (!k) return false;
+        return k.billing_type === 'free';
     };
 
     const projectPaidMap = new Map<string, boolean>();
+    const projectHasFreeMap = new Map<string, boolean>();
     const projectKeysMap = new Map<string, any[]>();
     (allUpstreamKeys || []).forEach((k: any) => {
         if (k.project_id) {
             if (!projectKeysMap.has(k.project_id)) projectKeysMap.set(k.project_id, []);
             projectKeysMap.get(k.project_id)!.push(k);
-            if (isPaidKey(k)) {
-                projectPaidMap.set(k.project_id, true);
+            if (isFreeKey(k)) {
+                projectHasFreeMap.set(k.project_id, true);
             }
         }
     });
+
+    // A project is purely paid if it has keys and none of them are free
+    for (const [pId, keys] of projectKeysMap.entries()) {
+        const hasFree = keys.some(k => isFreeKey(k));
+        if (!hasFree && keys.length > 0) {
+            projectPaidMap.set(pId, true);
+        }
+    }
 
     const findSlotSourceForModel = (targetModel: string, currentPaidProjects: Set<string>, allUsedProjects: Set<string>): string => {
         const modelLower = targetModel.toLowerCase();
@@ -229,37 +243,50 @@ export async function executeFusion(options: FusionExecuteOptions): Promise<{
         else if (modelLower.includes('kimi') || modelLower.includes('moonshot')) desiredProvider = 'nvidia';
         else if (modelLower.includes('claude') || modelLower.includes('gpt')) desiredProvider = 'puter';
         else if (modelLower.includes('cerebras') || modelLower.includes('qwen')) desiredProvider = 'cerebras';
+        else if (modelLower.includes('mistral')) desiredProvider = 'mistral';
 
         // 1. Matching provider that is FREE and not already used in this panel
         for (const [pId, keys] of projectKeysMap.entries()) {
             if (allUsedProjects.has(pId)) continue;
             if (projectPaidMap.get(pId)) continue;
-            const match = keys.some(k => (k.provider || '').toLowerCase() === desiredProvider && !isPaidKey(k));
+            const match = keys.some(k => (k.provider || '').toLowerCase() === desiredProvider && isFreeKey(k));
             if (match) return `project:${pId}`;
         }
 
         // 2. Matching provider that is FREE (reuse free project if needed)
         for (const [pId, keys] of projectKeysMap.entries()) {
             if (projectPaidMap.get(pId)) continue;
-            const match = keys.some(k => (k.provider || '').toLowerCase() === desiredProvider && !isPaidKey(k));
+            const match = keys.some(k => (k.provider || '').toLowerCase() === desiredProvider && isFreeKey(k));
             if (match) return `project:${pId}`;
         }
 
-        // 3. Matching provider that is PAID, provided no draft has used this paid project yet!
+        // 3. Fallback to OpenRouter or universal provider with a FREE key
         for (const [pId, keys] of projectKeysMap.entries()) {
-            if (currentPaidProjects.has(pId)) continue; // Anti-Monopoly: do not reuse paid project!
+            if (projectPaidMap.get(pId)) continue;
+            const match = keys.some(k => ((k.provider || '').toLowerCase() === 'openrouter' || (k.provider || '').toLowerCase() === 'puter') && isFreeKey(k));
+            if (match) return `project:${pId}`;
+        }
+
+        // Any other project that has a FREE key
+        for (const [pId, keys] of projectKeysMap.entries()) {
+            if (projectPaidMap.get(pId)) continue;
+            if (keys.some(k => isFreeKey(k))) return `project:${pId}`;
+        }
+
+        // If Strict Free-Tier Mode is active, NEVER allow any paid project or key!
+        if (isStrictFree) {
+            return '';
+        }
+
+        // --- BELOW THIS LINE ONLY APPLIES IF STRICT FREE MODE IS DISABLED (PAID ALLOWED AS LAST RESORT) ---
+        // 4. Matching provider that is PAID, provided no draft has used this paid project yet!
+        for (const [pId, keys] of projectKeysMap.entries()) {
+            if (currentPaidProjects.has(pId)) continue;
             const match = keys.some(k => (k.provider || '').toLowerCase() === desiredProvider);
             if (match) return `project:${pId}`;
         }
 
-        // 4. Fallback to OpenRouter FREE project ('Open router ') if available
-        for (const [pId, keys] of projectKeysMap.entries()) {
-            if (projectPaidMap.get(pId)) continue;
-            const match = keys.some(k => (k.provider || '').toLowerCase() === 'openrouter' && !isPaidKey(k));
-            if (match) return `project:${pId}`;
-        }
-
-        // 5. Fallback to OpenRouter PAID project ('Open router_Prim') ONLY IF no paid project has been used yet!
+        // 5. Fallback to OpenRouter PAID project ONLY IF no paid project has been used yet!
         if (currentPaidProjects.size === 0) {
             for (const [pId, keys] of projectKeysMap.entries()) {
                 const match = keys.some(k => (k.provider || '').toLowerCase() === 'openrouter');
@@ -285,9 +312,9 @@ export async function executeFusion(options: FusionExecuteOptions): Promise<{
             const pId = rawSource.replace('project:', '');
             const isPaid = projectPaidMap.get(pId);
             if (isPaid) {
-                if (usedPaidProjectIds.has(pId)) {
+                if (isStrictFree || usedPaidProjectIds.has(pId)) {
                     const altSource = findSlotSourceForModel(model, usedPaidProjectIds, allUsedProjectIds);
-                    console.log(`[Fusion Anti-Monopoly] Rerouted draft ${idx + 1} (${model}) away from already-used paid project '${pId}' to '${altSource || 'free fallback'}'`);
+                    console.log(`[Fusion Anti-Monopoly] Rerouted draft ${idx + 1} (${model}) away from paid project '${pId}' to '${altSource || 'free fallback'}'`);
                     chosenSource = altSource;
                 } else {
                     usedPaidProjectIds.add(pId);
@@ -297,9 +324,9 @@ export async function executeFusion(options: FusionExecuteOptions): Promise<{
             const kId = rawSource.replace('key:', '');
             const keyObj = (allUpstreamKeys || []).find((k: any) => k.id === kId);
             if (isPaidKey(keyObj)) {
-                if (usedPaidKeyIds.has(kId) || (keyObj?.project_id && usedPaidProjectIds.has(keyObj.project_id))) {
+                if (isStrictFree || usedPaidKeyIds.has(kId) || (keyObj?.project_id && usedPaidProjectIds.has(keyObj.project_id))) {
                     const altSource = findSlotSourceForModel(model, usedPaidProjectIds, allUsedProjectIds);
-                    console.log(`[Fusion Anti-Monopoly] Rerouted draft ${idx + 1} (${model}) away from already-used paid key '${kId}' to '${altSource || 'free fallback'}'`);
+                    console.log(`[Fusion Anti-Monopoly] Rerouted draft ${idx + 1} (${model}) away from paid key '${kId}' to '${altSource || 'free fallback'}'`);
                     chosenSource = altSource;
                 } else {
                     usedPaidKeyIds.add(kId);
@@ -407,10 +434,20 @@ export async function executeFusion(options: FusionExecuteOptions): Promise<{
     let judgeSlotSource = judgeRawSource;
     if (judgeRawSource.startsWith('project:')) {
         const jPid = judgeRawSource.replace('project:', '');
-        if (projectPaidMap.get(jPid) && usedPaidProjectIds.has(jPid)) {
+        if (projectPaidMap.get(jPid) && (isStrictFree || usedPaidProjectIds.has(jPid))) {
             const altJudge = findSlotSourceForModel(judge, usedPaidProjectIds, allUsedProjectIds);
             if (altJudge) {
                 console.log(`[Fusion Anti-Monopoly] Rerouted judge away from paid project '${jPid}' to '${altJudge}'`);
+                judgeSlotSource = altJudge;
+            }
+        }
+    } else if (judgeRawSource.startsWith('key:')) {
+        const jKid = judgeRawSource.replace('key:', '');
+        const keyObj = (allUpstreamKeys || []).find((k: any) => k.id === jKid);
+        if (isPaidKey(keyObj) && (isStrictFree || usedPaidKeyIds.has(jKid) || (keyObj?.project_id && usedPaidProjectIds.has(keyObj.project_id)))) {
+            const altJudge = findSlotSourceForModel(judge, usedPaidProjectIds, allUsedProjectIds);
+            if (altJudge) {
+                console.log(`[Fusion Anti-Monopoly] Rerouted judge away from paid key '${jKid}' to '${altJudge}'`);
                 judgeSlotSource = altJudge;
             }
         }
@@ -425,6 +462,8 @@ export async function executeFusion(options: FusionExecuteOptions): Promise<{
         messages: synthesisMessages,
         stream: !!body.stream,
         _targetSlotSource: judgeSlotSource,
+        _fusionExcludedProjects: Array.from(usedPaidProjectIds),
+        _fusionExcludedKeys: Array.from(usedPaidKeyIds),
         fallbackDraftContent: bestDraft.content,
     };
 
