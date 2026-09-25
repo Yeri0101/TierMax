@@ -1,48 +1,20 @@
-import { useState, useEffect, useContext, createContext, Component } from 'react';
+import { useState, Component } from 'react';
 import type { ReactNode } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { KeyRound, Sun, Moon, LayoutDashboard, ShieldCheck, Globe } from 'lucide-react';
+import { Sun, Moon, LayoutDashboard, ShieldCheck, Globe, Settings as SettingsIcon } from 'lucide-react';
 import { TierMaxLogo, CyberTerminalGlyph, DualEngineGlyph } from './components/Icons';
 import { WelcomeServerModal } from './components/WelcomeServerModal';
-import { NavbarSettingsMenu } from './components/NavbarSettingsMenu';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import ProjectDetail from './pages/ProjectDetail';
 import Playground from './pages/Playground';
 import EngineSettings from './pages/EngineSettings';
 import AuditLogs from './pages/AuditLogs';
+import Settings from './pages/Settings';
 import { LanguageProvider, useLanguage } from './i18n';
+import { ThemeProvider, useTheme } from './ThemeContext';
 import { ToastProvider } from './ToastContext';
-import { fetchApi } from './api';
 import './index.css';
-
-/* ─── Theme Context ─── */
-type Theme = 'dark' | 'light';
-const ThemeContext = createContext<{ theme: Theme; toggleTheme: () => void }>({
-  theme: 'dark',
-  toggleTheme: () => {},
-});
-
-const useTheme = () => useContext(ThemeContext);
-
-function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(() => {
-    return (localStorage.getItem('theme') as Theme) || 'dark';
-  });
-
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('theme', theme);
-  }, [theme]);
-
-  const toggleTheme = () => setTheme(t => (t === 'dark' ? 'light' : 'dark'));
-
-  return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
-      {children}
-    </ThemeContext.Provider>
-  );
-}
 
 /* ─── Error Boundary — prevents blank screen on render crash ─── */
 class ErrorBoundary extends Component<
@@ -110,51 +82,12 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   const { language, setLanguage, t } = useLanguage();
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
-  const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showWelcomeModal, setShowWelcomeModal] = useState<boolean>(() => {
     return localStorage.getItem('tiermax_hide_welcome') !== 'true';
   });
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [passwordError, setPasswordError] = useState('');
-  const [passwordSuccess, setPasswordSuccess] = useState('');
-  const [passwordLoading, setPasswordLoading] = useState(false);
-  const [dbMode, setDbMode] = useState<{ is_local: boolean; db_type: string } | null>(null);
   const isLoggedIn = !!localStorage.getItem('token');
 
-  useEffect(() => {
-    fetchApi('/system/info').then(data => setDbMode(data)).catch(() => {});
-  }, []);
-
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    window.location.href = '/login';
-  };
-
   const toggleLanguage = () => setLanguage(language === 'en' ? 'es' : 'en');
-
-  const handleChangePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setPasswordError('');
-    setPasswordSuccess('');
-    setPasswordLoading(true);
-    const username = localStorage.getItem('user') || 'admin';
-    try {
-      await fetchApi('/auth/credentials', {
-        method: 'PUT',
-        body: JSON.stringify({ currentUsername: username, currentPassword, newPassword }),
-      });
-      setPasswordSuccess(t('settings.success'));
-      setCurrentPassword('');
-      setNewPassword('');
-      setTimeout(() => setShowPasswordModal(false), 2000);
-    } catch (err: any) {
-      setPasswordError(err.message || t('settings.error'));
-    } finally {
-      setPasswordLoading(false);
-    }
-  };
 
   return (
     <>
@@ -223,6 +156,15 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 <ShieldCheck size={13} />
                 <span className="nav-link-text">{t('nav.audit')}</span>
               </Link>
+              <Link
+                to="/settings"
+                className={`btn btn-sm ${location.pathname === '/settings' ? 'btn-primary' : 'btn-ghost'}`}
+                style={{ padding: '0.3rem 0.65rem', fontSize: '0.75rem', borderRadius: 'var(--radius-pill)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                title={t('nav.settings')}
+              >
+                <SettingsIcon size={13} />
+                <span className="nav-link-text">{t('nav.settings')}</span>
+              </Link>
             </div>
           )}
 
@@ -286,66 +228,12 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
             <Globe size={13} style={{ color: 'var(--text-secondary)' }} />
             <span>{language.toUpperCase()}</span>
           </button>
-
-          {/* Unified Settings Dropdown: Groups Server Guide, Language, Theme, Password, Logout, Tenant & DB info */}
-          <NavbarSettingsMenu
-            dbMode={dbMode}
-            onOpenWelcomeModal={() => setShowWelcomeModal(true)}
-            onOpenPasswordModal={() => setShowPasswordModal(true)}
-            onLogout={handleLogout}
-            theme={theme}
-            toggleTheme={toggleTheme}
-            language={language}
-            toggleLanguage={toggleLanguage}
-            username={localStorage.getItem('user') || 'Admin'}
-          />
         </div>
       </nav>
 
       <main style={{ maxWidth: 1300, margin: '0 auto', padding: '2rem 1.5rem' }}>
         {children}
       </main>
-
-      {/* Change Password Modal */}
-      {showPasswordModal && (
-        <div onClick={() => setShowPasswordModal(false)} style={{
-          position: 'fixed', inset: 0, zIndex: 200,
-          background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem',
-        }}>
-          <div onClick={e => e.stopPropagation()} className="glass-panel" style={{
-            width: '100%', maxWidth: 400, padding: '2rem', border: '1px solid var(--border-accent)',
-          }}>
-            <div className="flex items-center justify-between" style={{ marginBottom: '1.5rem' }}>
-              <div className="flex items-center gap-2">
-                <KeyRound size={17} style={{ color: 'var(--brand-orange)' }} />
-                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>{t('settings.password_title')}</h3>
-              </div>
-              <button onClick={() => setShowPasswordModal(false)} className="btn btn-secondary btn-icon" aria-label="Close modal">✕</button>
-            </div>
-
-            {passwordError && <div className="alert alert-error" style={{ marginBottom: '1rem' }}>{passwordError}</div>}
-            {passwordSuccess && <div className="alert alert-success" style={{ marginBottom: '1rem' }}>{passwordSuccess}</div>}
-
-            <form onSubmit={handleChangePassword} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label>{t('settings.current_password')}</label>
-                <input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} placeholder="••••••••" required />
-              </div>
-              <div className="form-group" style={{ marginBottom: '0.5rem' }}>
-                <label>{t('settings.new_password')}</label>
-                <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="••••••••" required />
-              </div>
-              <div className="flex gap-3">
-                <button type="button" className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setShowPasswordModal(false)}>{t('settings.btn_cancel')}</button>
-                <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={passwordLoading}>
-                  {passwordLoading ? <><span className="spinner-ring" style={{ width: 14, height: 14, borderWidth: 2 }} /> Updating…</> : t('settings.btn_update')}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* Welcome & Startup Guide Modal */}
       <WelcomeServerModal
@@ -381,6 +269,7 @@ function App() {
                   <Route path="/playground" element={<PrivateRoute><Playground /></PrivateRoute>} />
                   <Route path="/engine" element={<PrivateRoute><EngineSettings /></PrivateRoute>} />
                   <Route path="/audit" element={<PrivateRoute><AuditLogs /></PrivateRoute>} />
+                  <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
                 </Routes>
               </Layout>
             </Router>
