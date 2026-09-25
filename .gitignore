@@ -30,3 +30,4 @@ backend/data/
 # Local submodules / audit folders
 audit-last30days-skill/
 openclaw-gateway-audit/
+.agents/
