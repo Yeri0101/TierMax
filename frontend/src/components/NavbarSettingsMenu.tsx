@@ -146,11 +146,11 @@ export const NavbarSettingsMenu: React.FC<NavbarSettingsMenuProps> = ({
                                 height: 28,
                                 borderRadius: '50%',
                                 background: 'var(--surface-2)',
-                                border: '1px solid var(--border-subtle)',
+                                border: '1px solid var(--border-default)',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                color: 'var(--brand-orange)'
+                                color: 'var(--text-secondary)'
                             }}>
                                 <User size={14} />
                             </div>
@@ -260,16 +260,16 @@ export const NavbarSettingsMenu: React.FC<NavbarSettingsMenuProps> = ({
                             }}
                         >
                             <span style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                                <Server size={13} style={{ color: 'var(--brand-orange)' }} />
+                                <Server size={13} style={{ color: 'var(--text-secondary)' }} />
                                 {t('nav.how_to_start') || '¿Cómo iniciar servidor?'}
                             </span>
                             <span style={{
                                 fontSize: '0.62rem',
                                 padding: '0.1rem 0.35rem',
                                 borderRadius: '4px',
-                                background: 'rgba(255, 107, 43, 0.12)',
-                                color: 'var(--brand-orange)',
-                                border: '1px solid rgba(255, 107, 43, 0.25)',
+                                background: 'var(--surface-card)',
+                                color: 'var(--text-secondary)',
+                                border: '1px solid var(--border-default)',
                                 fontWeight: 700,
                             }}>
                                 Guía

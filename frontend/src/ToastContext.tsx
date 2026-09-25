@@ -82,7 +82,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                         ? 'rgba(239, 68, 68, 0.45)'
                         : isWarning
                         ? 'rgba(245, 158, 11, 0.45)'
-                        : 'rgba(255, 107, 43, 0.35)';
+                        : 'var(--border-default, rgba(255, 255, 255, 0.15))';
 
                     const bgGlow = isSuccess
                         ? 'rgba(34, 197, 94, 0.12)'
@@ -90,7 +90,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                         ? 'rgba(239, 68, 68, 0.14)'
                         : isWarning
                         ? 'rgba(245, 158, 11, 0.14)'
-                        : 'rgba(255, 107, 43, 0.12)';
+                        : 'rgba(255, 255, 255, 0.04)';
 
                     const iconColor = isSuccess
                         ? '#22c55e'
@@ -98,7 +98,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                         ? '#ef4444'
                         : isWarning
                         ? '#f59e0b'
-                        : 'var(--brand-orange, #ff6b2b)';
+                        : 'var(--text-secondary, #94a3b8)';
 
                     return (
                         <div

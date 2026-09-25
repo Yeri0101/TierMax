@@ -389,12 +389,12 @@ export default function Dashboard() {
                         </div>
                         <div className="usage-summary-divider" />
                         <div className="usage-summary-metric">
-                            <div className="usage-summary-icon" style={{ background: 'rgba(255, 107, 43, 0.1)', color: 'var(--brand-orange)' }}>
+                            <div className="usage-summary-icon" style={{ background: 'var(--surface-2)', color: 'var(--text-secondary)' }}>
                                 <Zap size={15} />
                             </div>
                             <div>
                                 <div className="usage-summary-label">{t('dashboard.cache_stats')}</div>
-                                <div className="usage-summary-value" style={{ color: 'var(--brand-orange)' }}>
+                                <div className="usage-summary-value" style={{ color: 'var(--text-primary)' }}>
                                     {cacheStats ? `${Math.round((cacheStats.hitRate || 0) * 100)}%` : '98%'}
                                 </div>
                                 <div className="usage-summary-detail">
@@ -417,9 +417,9 @@ export default function Dashboard() {
                                 alignItems: 'center',
                                 gap: '0.35rem',
                                 borderRadius: 'var(--radius-pill)',
-                                background: 'rgba(255, 107, 43, 0.12)',
-                                border: '1px solid rgba(255, 107, 43, 0.3)',
-                                color: 'var(--brand-orange)',
+                                background: 'var(--surface-card)',
+                                border: '1px solid var(--border-default)',
+                                color: 'var(--text-secondary)',
                                 cursor: 'pointer',
                                 fontWeight: 600,
                             }}
@@ -450,7 +450,7 @@ export default function Dashboard() {
                             }} />
                             {isLiveConnected ? 'REAL-TIME' : 'POLLING'}
                         </span>
-                        <Activity size={16} style={{ color: 'var(--brand-orange)' }} />
+                        <Activity size={16} style={{ color: 'var(--text-secondary)' }} />
                         <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700 }}>{t('dashboard.recent_calls')}</h3>
                     </div>
                     <div className="recent-calls-grid">
@@ -462,7 +462,7 @@ export default function Dashboard() {
                             {call ? (
                                 <>
                                     <div>
-                                        <div style={{ fontSize: '0.72rem', color: 'var(--brand-orange)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '0.45rem' }}>
+                                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '0.45rem' }}>
                                             #{index + 1}
                                         </div>
                                         <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '0.2rem' }}>{t('dashboard.recent_project')}</div>
@@ -492,7 +492,7 @@ export default function Dashboard() {
                                 </>
                             ) : (
                                 <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', height: '100%' }}>
-                                    <div style={{ fontSize: '0.72rem', color: 'var(--brand-orange)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '0.45rem' }}>
+                                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '0.45rem' }}>
                                         #{index + 1}
                                     </div>
                                     <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>
@@ -570,15 +570,15 @@ export default function Dashboard() {
                         <div>
                             <div className="superpower-top">
                                 <div className="flex items-center gap-2">
-                                    <div className="superpower-icon-box" style={{ background: 'rgba(255,107,43,0.12)', border: '1px solid rgba(255,107,43,0.25)', color: 'var(--brand-orange)' }}>
+                                    <div className="superpower-icon-box" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}>
                                         <AnthropicIcon size={17} />
                                     </div>
                                     <div>
                                         <div className="superpower-title">Anthropic Wire Protocol</div>
-                                        <div style={{ fontSize: '0.68rem', color: 'var(--brand-orange)', fontFamily: 'var(--font-mono)' }}>POST /v1/messages</div>
+                                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>POST /v1/messages</div>
                                     </div>
                                 </div>
-                                <span className="superpower-badge" style={{ background: 'rgba(255,107,43,0.12)', color: 'var(--brand-orange)', border: '1px solid rgba(255,107,43,0.25)' }}>
+                                <span className="superpower-badge" style={{ background: 'var(--surface-2)', color: 'var(--text-secondary)', border: '1px solid var(--border-default)' }}>
                                     Native SSE
                                 </span>
                             </div>
@@ -606,15 +606,15 @@ export default function Dashboard() {
                         <div>
                             <div className="superpower-top">
                                 <div className="flex items-center gap-2">
-                                    <div className="superpower-icon-box" style={{ background: 'rgba(255,107,43,0.12)', border: '1px solid rgba(255,107,43,0.25)', color: 'var(--brand-orange)' }}>
-                                        <RouterCascadeGlyph size={17} color="var(--brand-orange)" />
+                                    <div className="superpower-icon-box" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}>
+                                        <RouterCascadeGlyph size={17} color="var(--text-secondary)" />
                                     </div>
                                     <div>
                                         <div className="superpower-title">Virtual Consensus Fusion</div>
-                                        <div style={{ fontSize: '0.68rem', color: 'var(--brand-orange)', fontFamily: 'var(--font-mono)' }}>model: "fusion"</div>
+                                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>model: "fusion"</div>
                                     </div>
                                 </div>
-                                <span className="superpower-badge" style={{ background: 'rgba(255,107,43,0.12)', color: 'var(--brand-orange)', border: '1px solid rgba(255,107,43,0.25)' }}>
+                                <span className="superpower-badge" style={{ background: 'var(--surface-2)', color: 'var(--status-healthy)', border: '1px solid var(--border-default)' }}>
                                     Consensus
                                 </span>
                             </div>
@@ -640,15 +640,15 @@ export default function Dashboard() {
                         <div>
                             <div className="superpower-top">
                                 <div className="flex items-center gap-2">
-                                    <div className="superpower-icon-box" style={{ background: 'rgba(255,107,43,0.12)', border: '1px solid rgba(255,107,43,0.25)', color: 'var(--brand-orange)' }}>
-                                        <DualEngineGlyph size={17} color="var(--brand-orange)" />
+                                    <div className="superpower-icon-box" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}>
+                                        <DualEngineGlyph size={17} color="var(--text-secondary)" />
                                     </div>
                                     <div>
                                         <div className="superpower-title">Ecosistema & Modelos</div>
-                                        <div style={{ fontSize: '0.68rem', color: 'var(--brand-orange)', fontFamily: 'var(--font-mono)' }}>16+ Proveedores</div>
+                                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>16+ Proveedores</div>
                                     </div>
                                 </div>
-                                <span className="superpower-badge" style={{ background: 'rgba(255,107,43,0.12)', color: 'var(--brand-orange)', border: '1px solid rgba(255,107,43,0.25)' }}>
+                                <span className="superpower-badge" style={{ background: 'var(--surface-2)', color: 'var(--text-secondary)', border: '1px solid var(--border-default)' }}>
                                     Zero-Drop SOAT
                                 </span>
                             </div>
@@ -799,7 +799,7 @@ export default function Dashboard() {
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }} onClick={e => e.preventDefault()}>
                                             <button
                                                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); toast.success(t('dashboard.preset_ultraspeed') + ' Activated'); }}
-                                                style={{ cursor: 'pointer', background: 'var(--surface-2)', color: 'var(--brand-orange)', border: '1px solid var(--border-subtle)', fontSize: '0.68rem', padding: '0.15rem 0.4rem', borderRadius: '4px' }}
+                                                style={{ cursor: 'pointer', background: 'var(--surface-2)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', fontSize: '0.68rem', padding: '0.15rem 0.4rem', borderRadius: '4px' }}
                                                 title="Force Ultra-Speed routing (<100ms)"
                                             >
                                                 🏎️ Speed

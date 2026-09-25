@@ -563,11 +563,11 @@ export default function Playground() {
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '0.75rem', fontSize: '0.78rem' }}>
                                 <div style={{ background: 'var(--surface-2)', padding: '0.5rem 0.75rem', borderRadius: 6 }}>
                                     <div style={{ color: 'var(--text-muted)', fontSize: '0.68rem' }}>ENGINE</div>
-                                    <div style={{ fontWeight: 700, color: 'var(--brand-orange)' }}>{executionMeta.engine}</div>
+                                    <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{executionMeta.engine}</div>
                                 </div>
                                 <div style={{ background: 'var(--surface-2)', padding: '0.5rem 0.75rem', borderRadius: 6 }}>
                                     <div style={{ color: 'var(--text-muted)', fontSize: '0.68rem' }}>TIER</div>
-                                    <div style={{ fontWeight: 700, textTransform: 'capitalize', color: 'var(--brand-orange)' }}>
+                                    <div style={{ fontWeight: 700, textTransform: 'capitalize', color: 'var(--text-primary)' }}>
                                         {executionMeta.tier}
                                     </div>
                                 </div>

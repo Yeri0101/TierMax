@@ -390,7 +390,7 @@ export default function AuditLogs() {
                                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                                                                 <span><strong>Event ID:</strong> {event.id}</span>
                                                                 <span>·</span>
-                                                                <span><strong>Prev Hash Pointer:</strong> <code style={{ color: 'var(--brand-orange)' }}>{event.prevHash ? `${event.prevHash.slice(0, 16)}...` : 'GENESIS'}</code></span>
+                                                                <span><strong>Prev Hash Pointer:</strong> <code style={{ color: 'var(--text-secondary)' }}>{event.prevHash ? `${event.prevHash.slice(0, 16)}...` : 'GENESIS'}</code></span>
                                                             </div>
                                                             <div>
                                                                 <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '0.3rem', textTransform: 'uppercase' }}>

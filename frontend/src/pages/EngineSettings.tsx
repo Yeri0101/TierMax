@@ -885,10 +885,10 @@ export default function EngineSettings() {
                 <div className="flex items-center justify-between" style={{ borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                     <div className="flex items-center gap-2">
                         <div style={{
-                            width: 32, height: 32, borderRadius: 8, background: 'rgba(255,107,43,0.12)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--brand-orange)'
+                            width: 32, height: 32, borderRadius: 8, background: 'var(--surface-2)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)'
                         }}>
-                            <RouterCascadeGlyph size={18} color="var(--brand-orange)" />
+                            <RouterCascadeGlyph size={18} color="var(--text-secondary)" />
                         </div>
                         <div>
                             <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>{t('engine.fusion_title') || 'Virtual Consensus Fusion · Panel Fijo de 3 Modelos & Juez'}</h3>
@@ -1061,7 +1061,7 @@ export default function EngineSettings() {
                                         display: 'flex',
                                         alignItems: 'center',
                                         gap: '0.35rem',
-                                        color: slot.isJudge ? 'var(--brand-orange)' : undefined,
+                                        color: slot.isJudge ? 'var(--text-primary)' : undefined,
                                         margin: 0
                                     }}>
                                         <span style={{ width: 8, height: 8, borderRadius: '50%', background: slot.color }} />

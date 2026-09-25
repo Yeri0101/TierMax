@@ -145,9 +145,9 @@ export const WelcomeServerModal: React.FC<WelcomeServerModalProps> = ({ isOpen, 
                                     fontWeight: 700,
                                     padding: '0.1rem 0.4rem',
                                     borderRadius: '4px',
-                                    background: 'rgba(255, 107, 43, 0.12)',
-                                    color: 'var(--brand-orange)',
-                                    border: '1px solid rgba(255, 107, 43, 0.25)'
+                                    background: 'var(--surface-2)',
+                                    color: 'var(--text-secondary)',
+                                    border: '1px solid var(--border-default)'
                                 }}>
                                     {t('welcome.badge') || 'Guía Rápida'}
                                 </span>
@@ -212,15 +212,15 @@ export const WelcomeServerModal: React.FC<WelcomeServerModalProps> = ({ isOpen, 
                     <div style={{
                         padding: '0.85rem 1rem',
                         borderRadius: '10px',
-                        background: 'rgba(56, 189, 248, 0.06)',
-                        border: '1px solid rgba(56, 189, 248, 0.2)',
+                        background: 'var(--surface-2)',
+                        border: '1px solid var(--border-default)',
                         display: 'flex',
                         gap: '0.75rem',
                         fontSize: '0.8rem',
                         color: 'var(--text-secondary)',
                         lineHeight: 1.5
                     }}>
-                        <Info size={18} style={{ color: 'var(--brand-orange)', flexShrink: 0, marginTop: 2 }} />
+                        <Info size={18} style={{ color: 'var(--text-muted)', flexShrink: 0, marginTop: 2 }} />
                         <div>
                             <strong>{t('welcome.important_note') || '¿Se ejecuta PM2 automáticamente al descargar el repo?'}</strong>
                             <p style={{ margin: '0.25rem 0 0 0', opacity: 0.9 }}>
@@ -238,9 +238,9 @@ export const WelcomeServerModal: React.FC<WelcomeServerModalProps> = ({ isOpen, 
                                 style={{
                                     padding: '0.4rem 0.8rem',
                                     borderRadius: '6px',
-                                    border: 'none',
-                                    background: activeTab === 'quickstart' ? 'rgba(255, 107, 43, 0.12)' : 'transparent',
-                                    color: activeTab === 'quickstart' ? 'var(--brand-orange)' : 'var(--text-muted)',
+                                    border: activeTab === 'quickstart' ? '1px solid var(--border-default)' : '1px solid transparent',
+                                    background: activeTab === 'quickstart' ? 'var(--surface-2)' : 'transparent',
+                                    color: activeTab === 'quickstart' ? 'var(--text-primary)' : 'var(--text-muted)',
                                     fontWeight: activeTab === 'quickstart' ? 700 : 500,
                                     fontSize: '0.78rem',
                                     cursor: 'pointer',
@@ -257,9 +257,9 @@ export const WelcomeServerModal: React.FC<WelcomeServerModalProps> = ({ isOpen, 
                                 style={{
                                     padding: '0.4rem 0.8rem',
                                     borderRadius: '6px',
-                                    border: 'none',
-                                    background: activeTab === 'npm' ? 'rgba(255, 107, 43, 0.12)' : 'transparent',
-                                    color: activeTab === 'npm' ? 'var(--brand-orange)' : 'var(--text-muted)',
+                                    border: activeTab === 'npm' ? '1px solid var(--border-default)' : '1px solid transparent',
+                                    background: activeTab === 'npm' ? 'var(--surface-2)' : 'transparent',
+                                    color: activeTab === 'npm' ? 'var(--text-primary)' : 'var(--text-muted)',
                                     fontWeight: activeTab === 'npm' ? 700 : 500,
                                     fontSize: '0.78rem',
                                     cursor: 'pointer',
@@ -276,9 +276,9 @@ export const WelcomeServerModal: React.FC<WelcomeServerModalProps> = ({ isOpen, 
                                 style={{
                                     padding: '0.4rem 0.8rem',
                                     borderRadius: '6px',
-                                    border: 'none',
-                                    background: activeTab === 'pm2' ? 'rgba(255, 107, 43, 0.12)' : 'transparent',
-                                    color: activeTab === 'pm2' ? 'var(--brand-orange)' : 'var(--text-muted)',
+                                    border: activeTab === 'pm2' ? '1px solid var(--border-default)' : '1px solid transparent',
+                                    background: activeTab === 'pm2' ? 'var(--surface-2)' : 'transparent',
+                                    color: activeTab === 'pm2' ? 'var(--text-primary)' : 'var(--text-muted)',
                                     fontWeight: activeTab === 'pm2' ? 700 : 500,
                                     fontSize: '0.78rem',
                                     cursor: 'pointer',
@@ -295,9 +295,9 @@ export const WelcomeServerModal: React.FC<WelcomeServerModalProps> = ({ isOpen, 
                                 style={{
                                     padding: '0.4rem 0.8rem',
                                     borderRadius: '6px',
-                                    border: 'none',
-                                    background: activeTab === 'docker' ? 'rgba(255, 107, 43, 0.12)' : 'transparent',
-                                    color: activeTab === 'docker' ? 'var(--brand-orange)' : 'var(--text-muted)',
+                                    border: activeTab === 'docker' ? '1px solid var(--border-default)' : '1px solid transparent',
+                                    background: activeTab === 'docker' ? 'var(--surface-2)' : 'transparent',
+                                    color: activeTab === 'docker' ? 'var(--text-primary)' : 'var(--text-muted)',
                                     fontWeight: activeTab === 'docker' ? 700 : 500,
                                     fontSize: '0.78rem',
                                     cursor: 'pointer',
