@@ -1,13 +1,15 @@
 import { useState, useEffect, useContext, createContext, Component } from 'react';
 import type { ReactNode } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
-import { Globe, KeyRound, LogOut, Sun, Moon, LayoutDashboard } from 'lucide-react';
+import { Globe, KeyRound, LogOut, Sun, Moon, LayoutDashboard, ShieldCheck } from 'lucide-react';
 import { TierMaxLogo, CyberTerminalGlyph, DualEngineGlyph } from './components/Icons';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import ProjectDetail from './pages/ProjectDetail';
 import Playground from './pages/Playground';
 import EngineSettings from './pages/EngineSettings';
+import AuditLogs from './pages/AuditLogs';
+import { TenantSwitcher } from './components/aaa/TenantSwitcher';
 import { LanguageProvider, useLanguage } from './i18n';
 import { ToastProvider } from './ToastContext';
 import { fetchApi } from './api';
@@ -196,6 +198,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 <span>{dbMode.is_local ? '💾 SQLite Local' : '☁️ Supabase'}</span>
               </div>
             )}
+            <TenantSwitcher />
           </div>
         )}
 
@@ -238,6 +241,15 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               >
                 <DualEngineGlyph size={13} />
                 <span>{t('nav.engine')}</span>
+              </Link>
+              <Link
+                to="/audit"
+                className={`btn btn-sm ${location.pathname === '/audit' ? 'btn-primary' : 'btn-ghost'}`}
+                style={{ padding: '0.3rem 0.65rem', fontSize: '0.75rem', borderRadius: 'var(--radius-pill)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                title={t('nav.audit')}
+              >
+                <ShieldCheck size={13} />
+                <span>{t('nav.audit')}</span>
               </Link>
             </div>
           )}
@@ -373,6 +385,7 @@ function App() {
                   <Route path="/projects/:id" element={<PrivateRoute><ProjectDetail /></PrivateRoute>} />
                   <Route path="/playground" element={<PrivateRoute><Playground /></PrivateRoute>} />
                   <Route path="/engine" element={<PrivateRoute><EngineSettings /></PrivateRoute>} />
+                  <Route path="/audit" element={<PrivateRoute><AuditLogs /></PrivateRoute>} />
                 </Routes>
               </Layout>
             </Router>

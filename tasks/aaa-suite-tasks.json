@@ -1,0 +1,605 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "OpenClaw Gateway AAA Suite Task Manifest",
+  "version": "1.0.0",
+  "generatedAt": "2026-09-24T21:55:00Z",
+  "project": "OpenClaw Gateway AAA Suite",
+  "mergeOrder": [
+    "feature/aaa-01-core-storage",
+    "feature/aaa-02-authn-keys-oidc-mtls",
+    "feature/aaa-03-authz-rbac-abac-routes",
+    "feature/aaa-04-autha-metering-ratelimit",
+    "feature/aaa-05-autha-audit-siem",
+    "feature/aaa-06-admin-api-ui"
+  ],
+  "milestones": [
+    {
+      "id": "M1",
+      "name": "AAA Core Architecture & Storage Layer",
+      "featureBranch": "feature/aaa-01-core-storage",
+      "description": "Establish unified storage contracts, in-memory LRU and Redis distributed adapters, atomic Lua scripts, and multi-tenant database migrations.",
+      "tasks": [
+        {
+          "taskId": "AAA-M1-01",
+          "name": "Multi-Tenant Database Migrations",
+          "description": "Create PostgreSQL and SQLite compatible DDL migrations for organizations, workspaces, roles, permissions, and hashed key columns.",
+          "featureBranch": "feature/aaa-01-core-storage",
+          "dependencies": [],
+          "inputs": [
+            "backend/migrations/02_request_logs.sql",
+            "backend/src/db/sqliteAdapter.ts"
+          ],
+          "outputs": [
+            "backend/migrations/20260925000000_aaa_tenants_and_rbac.sql",
+            "backend/migrations/20260925000100_aaa_hashed_keys_and_policies.sql",
+            "backend/migrations/20260925000200_aaa_audit_and_quotas.sql"
+          ],
+          "implementationSteps": [
+            "Draft tenant and membership tables with UUID primary keys and cascading foreign keys.",
+            "Draft roles, permissions, and role_permissions tables pre-seeded with enterprise standard roles.",
+            "Draft alter table statements for gateway_keys to add key_prefix, secret_hash, and policy constraints.",
+            "Ensure full ANSI SQL compatibility across SQLite DatabaseSync and PostgreSQL/Supabase."
+          ],
+          "acceptanceCriteria": [
+            "SQL files parse cleanly without syntax errors.",
+            "Tables can be bootstrapped in SQLite and applied cleanly to PostgreSQL.",
+            "Zero data loss on existing request_logs or gateway_keys tables."
+          ]
+        },
+        {
+          "taskId": "AAA-M1-02",
+          "name": "Unified Storage Backend Contract & Types",
+          "description": "Define TypeScript interface AAAStorageBackend covering key caching, sliding window rate limits, concurrency slots, quota holds, and audit queueing.",
+          "featureBranch": "feature/aaa-01-core-storage",
+          "dependencies": [],
+          "inputs": [
+            "PROJECT.md § Interface Contracts 1 & 2"
+          ],
+          "outputs": [
+            "backend/src/aaa/types.ts",
+            "backend/src/aaa/storage/interface.ts"
+          ],
+          "implementationSteps": [
+            "Define RateLimitResult, HashedKeyData, AuthIdentity, AuthContext, Policy, and AuditEvent contracts.",
+            "Define AAAStorageBackend lifecycle methods (init, close).",
+            "Define atomic rate limit, concurrency, and quota contract signatures.",
+            "Export all contracts through backend/src/aaa/index.ts."
+          ],
+          "acceptanceCriteria": [
+            "Interface signatures strictly match PROJECT.md specifications.",
+            "TypeScript compiler passes with strict type checking enabled."
+          ]
+        },
+        {
+          "taskId": "AAA-M1-03",
+          "name": "In-Memory Storage Adapter",
+          "description": "Implement zero-dependency MemoryStorageBackend using LRU cache, timestamp sliding arrays, and quota balance maps.",
+          "featureBranch": "feature/aaa-01-core-storage",
+          "dependencies": ["AAA-M1-02"],
+          "inputs": [
+            "backend/src/aaa/storage/interface.ts"
+          ],
+          "outputs": [
+            "backend/src/aaa/storage/memoryStorage.ts"
+          ],
+          "implementationSteps": [
+            "Implement in-memory Map with TTL eviction for getHashedKey / setHashedKey.",
+            "Implement sliding-window rate limit evaluator using timestamped millisecond logs.",
+            "Implement active concurrency slot counters with acquire/release methods.",
+            "Implement quota reservation wallet tracking reserved and settled balances in USD.",
+            "Implement in-memory audit event queue with batch flush."
+          ],
+          "acceptanceCriteria": [
+            "All AAAStorageBackend interface methods are genuinely implemented.",
+            "Rate limit sliding window resets accurately after windowSeconds.",
+            "Concurrency slot limits reject when active count equals maxConcurrent.",
+            "Quota reservation correctly decrements available balance and settles post-execution."
+          ]
+        },
+        {
+          "taskId": "AAA-M1-04",
+          "name": "Redis Storage Adapter & Lua Scripts",
+          "description": "Implement high-throughput RedisStorageBackend using atomic Lua scripts for sliding-window rate limiting and quota holds.",
+          "featureBranch": "feature/aaa-01-core-storage",
+          "dependencies": ["AAA-M1-02"],
+          "inputs": [
+            "backend/src/aaa/storage/interface.ts"
+          ],
+          "outputs": [
+            "backend/src/aaa/storage/redisStorage.ts",
+            "backend/src/aaa/storage/lua/sliding_window.lua",
+            "backend/src/aaa/storage/lua/quota_reserve.lua"
+          ],
+          "implementationSteps": [
+            "Write sliding_window.lua using Redis sorted sets (ZADD, ZREMRANGEBYSCORE, ZCARD, EXPIRE).",
+            "Write quota_reserve.lua performing atomic balance check and reservation decrement.",
+            "Implement RedisStorageBackend invoking loaded Lua scripts via SHA.",
+            "Add connection retry logic, prefix namespacing, and graceful shutdown."
+          ],
+          "acceptanceCriteria": [
+            "Lua scripts execute atomically without race conditions under concurrency.",
+            "Rate limit evaluation completes in single round-trip.",
+            "Gracefully handles Redis connection errors with informative logs."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "M2",
+      "name": "Enterprise Authentication (AuthN) Suite",
+      "featureBranch": "feature/aaa-02-authn-keys-oidc-mtls",
+      "description": "Scaffold and implement SHA-256 hashed API keys, plaintext migration utility, federated OIDC/OAuth2 verifier, mTLS extractor, and unified authnMiddleware.",
+      "tasks": [
+        {
+          "taskId": "AAA-M2-01",
+          "name": "Hashed API Key Manager",
+          "description": "Build secure key generation (oc_<env>_<id>_<secret>), SHA-256 hash validation, timingSafeEqual comparison, and key rotation.",
+          "featureBranch": "feature/aaa-02-authn-keys-oidc-mtls",
+          "dependencies": ["AAA-M1-01", "AAA-M1-02"],
+          "inputs": [
+            "backend/src/aaa/types.ts",
+            "backend/src/aaa/storage/interface.ts"
+          ],
+          "outputs": [
+            "backend/src/aaa/authn/keyManager.ts"
+          ],
+          "implementationSteps": [
+            "Implement generateApiKey(tenantId, projectId, name, env, options) returning plaintext key once.",
+            "Implement verifyApiKey(token) parsing prefix, looking up hash, and validating via crypto.timingSafeEqual.",
+            "Implement rotateApiKey(keyId, gracePeriodDays) supporting secondary key grace periods.",
+            "Integrate caching via AAAStorageBackend."
+          ],
+          "acceptanceCriteria": [
+            "Plaintext secret is never stored in DB or logs.",
+            "Validation succeeds with valid key and fails with invalid/revoked/expired keys.",
+            "Constant-time comparison protects against timing attacks."
+          ]
+        },
+        {
+          "taskId": "AAA-M2-02",
+          "name": "Plaintext Key In-Place Migration Utility",
+          "description": "Utility to migrate existing legacy plaintext gateway_keys into hashed format without disrupting running client connections.",
+          "featureBranch": "feature/aaa-02-authn-keys-oidc-mtls",
+          "dependencies": ["AAA-M2-01"],
+          "inputs": [
+            "backend/src/db/sqliteAdapter.ts",
+            "backend/src/routes/gatewayKeys.ts"
+          ],
+          "outputs": [
+            "backend/src/aaa/authn/keyMigration.ts"
+          ],
+          "implementationSteps": [
+            "Scan legacy gateway_keys where secret_hash IS NULL.",
+            "Generate deterministic key_prefix and secret_hash for each existing key.",
+            "Update record in transaction while retaining backwards compatibility during rollout.",
+            "Provide CLI dry-run and apply modes."
+          ],
+          "acceptanceCriteria": [
+            "All existing gateway keys receive valid prefix and SHA-256 hash.",
+            "No client disconnection occurs during migration rollout."
+          ]
+        },
+        {
+          "taskId": "AAA-M2-03",
+          "name": "Federated OIDC & JWT Verifier",
+          "description": "Dynamic JWKS discovery, RS256/ES256 verification, and claims mapping for enterprise IdPs (Okta, Keycloak, Azure AD).",
+          "featureBranch": "feature/aaa-02-authn-keys-oidc-mtls",
+          "dependencies": ["AAA-M1-02"],
+          "inputs": [
+            "backend/src/aaa/config.ts",
+            "backend/src/aaa/types.ts"
+          ],
+          "outputs": [
+            "backend/src/aaa/authn/oidcValidator.ts"
+          ],
+          "implementationSteps": [
+            "Fetch and cache .well-known/openid-configuration and jwks.json.",
+            "Verify JWT signatures against cached public keys with auto-refresh on unknown kid.",
+            "Validate standard claims (iss, aud, exp, nbf).",
+            "Extract tenant, role, and permission scopes into AuthIdentity."
+          ],
+          "acceptanceCriteria": [
+            "Accurately validates valid OIDC tokens and rejects expired or tampered signatures.",
+            "Caches JWKS keys with configurable TTL."
+          ]
+        },
+        {
+          "taskId": "AAA-M2-04",
+          "name": "Mutual TLS (mTLS) Certificate Extractor",
+          "description": "Extract and validate client TLS certificates from direct TLS sockets or reverse-proxy ingress headers (XFCC / X-Client-Cert).",
+          "featureBranch": "feature/aaa-02-authn-keys-oidc-mtls",
+          "dependencies": ["AAA-M1-02"],
+          "inputs": [
+            "backend/src/aaa/config.ts",
+            "backend/src/aaa/types.ts"
+          ],
+          "outputs": [
+            "backend/src/aaa/authn/mtlsExtractor.ts"
+          ],
+          "implementationSteps": [
+            "Parse client certificate from Node TLS socket or RFC-compliant XFCC headers.",
+            "Extract Subject CN, Subject SANs, and SHA-256 fingerprint.",
+            "Match certificate fingerprint against tenant service account whitelist.",
+            "Inject mTLSCertificate metadata into request AuthContext."
+          ],
+          "acceptanceCriteria": [
+            "Correctly extracts SAN/CN from simulated and real client certificates.",
+            "Rejects untrusted or mismatched certificates when mTLS mode is enforced."
+          ]
+        },
+        {
+          "taskId": "AAA-M2-05",
+          "name": "Unified AuthN Middleware",
+          "description": "Hono middleware evaluating API keys, OIDC Bearer tokens, and mTLS certs to bind verified AuthContext to c.set('authContext').",
+          "featureBranch": "feature/aaa-02-authn-keys-oidc-mtls",
+          "dependencies": ["AAA-M2-01", "AAA-M2-03", "AAA-M2-04"],
+          "inputs": [
+            "backend/src/aaa/authn/keyManager.ts",
+            "backend/src/aaa/authn/oidcValidator.ts",
+            "backend/src/aaa/authn/mtlsExtractor.ts"
+          ],
+          "outputs": [
+            "backend/src/aaa/authn/authnMiddleware.ts"
+          ],
+          "implementationSteps": [
+            "Extract credential from Authorization Bearer, x-api-key, or anthropic-api-key.",
+            "Dispatch to appropriate authenticator strategy.",
+            "Construct unified AuthContext and attach to Hono context.",
+            "Return standardized 401 Unauthorized JSON error on authentication failure."
+          ],
+          "acceptanceCriteria": [
+            "Successfully authenticates API key, OIDC token, and mTLS credentials.",
+            "Injects verified AuthContext available to downstream middlewares."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "M3",
+      "name": "Dynamic Authorization (AuthZ) & Governance",
+      "featureBranch": "feature/aaa-03-authz-rbac-abac-routes",
+      "description": "Implement RBAC permissions matrix, contextual ABAC policy engine, model governance parameter clamps, and unified authzMiddleware.",
+      "tasks": [
+        {
+          "taskId": "AAA-M3-01",
+          "name": "RBAC Roles & Permissions Taxonomy",
+          "description": "Define enterprise role hierarchy (SuperAdmin, OrgAdmin, ProjectAdmin, Developer, Auditor) and granular action scopes.",
+          "featureBranch": "feature/aaa-03-authz-rbac-abac-routes",
+          "dependencies": ["AAA-M1-02"],
+          "inputs": [
+            "backend/src/aaa/types.ts"
+          ],
+          "outputs": [
+            "backend/src/aaa/authz/permissions.ts"
+          ],
+          "implementationSteps": [
+            "Define permission constants (llm:chat:invoke, keys:create, audit:read, etc.).",
+            "Define built-in role capability maps with inheritance.",
+            "Implement hasPermission(identity, requiredPermission) evaluator."
+          ],
+          "acceptanceCriteria": [
+            "Role hierarchy correctly resolves inherited capabilities.",
+            "SuperAdmin matches all wildcards (*)."
+          ]
+        },
+        {
+          "taskId": "AAA-M3-02",
+          "name": "Contextual ABAC Policy Engine",
+          "description": "High-performance policy evaluator evaluating subject, resource, action, and environment (IP CIDR, time window, model rules).",
+          "featureBranch": "feature/aaa-03-authz-rbac-abac-routes",
+          "dependencies": ["AAA-M3-01"],
+          "inputs": [
+            "backend/src/aaa/types.ts",
+            "backend/src/aaa/authz/permissions.ts"
+          ],
+          "outputs": [
+            "backend/src/aaa/authz/policyEngine.ts"
+          ],
+          "implementationSteps": [
+            "Implement PolicyEvaluationRequest and PolicyDecision schemas.",
+            "Implement IP CIDR subnet matching logic (IPv4/IPv6).",
+            "Implement time-window (UTC schedule) evaluator.",
+            "Evaluate allow/deny rules with explicit deny override."
+          ],
+          "acceptanceCriteria": [
+            "Denies requests originating from disallowed CIDR blocks.",
+            "Enforces time-of-day restrictions accurately.",
+            "Returns structured PolicyDecision with reason and parameter clamps."
+          ]
+        },
+        {
+          "taskId": "AAA-M3-03",
+          "name": "Model Governance & Parameter Clamps",
+          "description": "Enforce model access control, ceilings on max_tokens and temperature, and provider data classification isolation.",
+          "featureBranch": "feature/aaa-03-authz-rbac-abac-routes",
+          "dependencies": ["AAA-M3-02"],
+          "inputs": [
+            "backend/src/aaa/types.ts",
+            "backend/src/utils/completionEngine.ts"
+          ],
+          "outputs": [
+            "backend/src/aaa/authz/modelGovernance.ts"
+          ],
+          "implementationSteps": [
+            "Implement model allowlist/denylist with wildcard globbing (e.g., claude-3-5*).",
+            "Implement parameter clampers for max_tokens and temperature.",
+            "Implement provider isolation rule preventing confidential data from routing to public free tiers."
+          ],
+          "acceptanceCriteria": [
+            "Clamps max_tokens if requested value exceeds key ceiling.",
+            "Blocks unauthorized models with 403 Forbidden."
+          ]
+        },
+        {
+          "taskId": "AAA-M3-04",
+          "name": "Unified AuthZ Middleware",
+          "description": "Declarative route protection middleware for data plane (/v1/*) and control plane (/api/*).",
+          "featureBranch": "feature/aaa-03-authz-rbac-abac-routes",
+          "dependencies": ["AAA-M3-02", "AAA-M3-03"],
+          "inputs": [
+            "backend/src/aaa/authz/policyEngine.ts",
+            "backend/src/aaa/authz/modelGovernance.ts"
+          ],
+          "outputs": [
+            "backend/src/aaa/authz/authzMiddleware.ts"
+          ],
+          "implementationSteps": [
+            "Extract requested action and resource from Hono request path and method.",
+            "Invoke policyEngine.evaluate().",
+            "Apply parameter clamps to request body if allowed.",
+            "Return 403 Forbidden with structured error if denied, triggering audit event."
+          ],
+          "acceptanceCriteria": [
+            "Unauthorized requests receive HTTP 403 with detailed reason code.",
+            "Authorized requests proceed with clamped parameters injected."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "M4",
+      "name": "Consumer Accounting & Rate Limiting (AuthA Part 1)",
+      "featureBranch": "feature/aaa-04-autha-metering-ratelimit",
+      "description": "Implement sliding-window RPM/TPM/concurrency rate limiting with RFC 6585 headers, atomic quota reservation wallet, and streaming SSE settlement.",
+      "tasks": [
+        {
+          "taskId": "AAA-M4-01",
+          "name": "Consumer Rate Limiter & RFC 6585 Headers",
+          "description": "Sliding-window rate limiter tracking RPM, TPM, RPS, and in-flight concurrency, injecting RateLimit-* response headers.",
+          "featureBranch": "feature/aaa-04-autha-metering-ratelimit",
+          "dependencies": ["AAA-M1-02", "AAA-M1-03"],
+          "inputs": [
+            "backend/src/aaa/storage/interface.ts"
+          ],
+          "outputs": [
+            "backend/src/aaa/autha/consumerRateLimiter.ts"
+          ],
+          "implementationSteps": [
+            "Implement sliding-window evaluation per consumer key, tenant, and IP.",
+            "Implement concurrency slot acquisition and release in request lifecycle.",
+            "Inject standard headers: RateLimit-Limit, RateLimit-Remaining, RateLimit-Reset.",
+            "Return HTTP 429 with Retry-After when limits are exceeded."
+          ],
+          "acceptanceCriteria": [
+            "Blocks requests exceeding RPM/TPM with HTTP 429.",
+            "Sets RFC 6585 and draft IETF rate limit headers accurately on all responses.",
+            "Concurrently tracks active in-flight requests without leaks."
+          ]
+        },
+        {
+          "taskId": "AAA-M4-02",
+          "name": "Atomic Token Quota Manager",
+          "description": "Pre-flight token estimation and atomic wallet hold, preventing concurrency balance overdrafts.",
+          "featureBranch": "feature/aaa-04-autha-metering-ratelimit",
+          "dependencies": ["AAA-M1-02", "AAA-M1-03"],
+          "inputs": [
+            "backend/src/aaa/storage/interface.ts",
+            "backend/src/routes/pricing.ts"
+          ],
+          "outputs": [
+            "backend/src/aaa/autha/quotaManager.ts"
+          ],
+          "implementationSteps": [
+            "Estimate prompt tokens and compute estimated pre-flight cost.",
+            "Execute atomic quota hold via storageBackend.reserveQuota().",
+            "Return HTTP 402 Payment Required if balance is insufficient.",
+            "Provide reconciliation method to settle actual cost vs held cost."
+          ],
+          "acceptanceCriteria": [
+            "Rejects request with 402 when estimated cost exceeds wallet balance.",
+            "Atomically holds and releases quota without double-spending."
+          ]
+        },
+        {
+          "taskId": "AAA-M4-03",
+          "name": "Streaming SSE Usage Settlement Hook",
+          "description": "Instrument Hono stream writer to track chunk tokens in real-time, reconciling quota reservations on stream completion or abort.",
+          "featureBranch": "feature/aaa-04-autha-metering-ratelimit",
+          "dependencies": ["AAA-M4-02"],
+          "inputs": [
+            "backend/src/routes/v1.ts",
+            "backend/src/utils/completionEngine.ts"
+          ],
+          "outputs": [
+            "backend/src/aaa/autha/streamingAccounting.ts"
+          ],
+          "implementationSteps": [
+            "Wrap Hono SSE stream chunk writer.",
+            "Parse chunk deltas and accumulate token count.",
+            "On stream end or abort, invoke quotaManager.settle() with actual tokens.",
+            "Insert final record into request_logs table."
+          ],
+          "acceptanceCriteria": [
+            "Stream chunks are delivered with zero added buffering latency.",
+            "Quota hold is reconciled immediately upon stream completion or client disconnect."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "M5",
+      "name": "Immutable Audit Ledger & SIEM Export (AuthA Part 2)",
+      "featureBranch": "feature/aaa-05-autha-audit-siem",
+      "description": "Implement immutable security audit ledger with SHA-256 hash chaining, asynchronous buffer queue, and Syslog, OTel, and Webhook SIEM exporters.",
+      "tasks": [
+        {
+          "taskId": "AAA-M5-01",
+          "name": "Immutable Security Audit Ledger",
+          "description": "Build immutable audit logging engine conforming to CloudEvents and RFC 5424 specifications with optional SHA-256 hash chaining.",
+          "featureBranch": "feature/aaa-05-autha-audit-siem",
+          "dependencies": ["AAA-M1-01", "AAA-M1-02"],
+          "inputs": [
+            "backend/src/aaa/types.ts",
+            "backend/migrations/20260925000200_aaa_audit_and_quotas.sql"
+          ],
+          "outputs": [
+            "backend/src/aaa/autha/auditLogger.ts"
+          ],
+          "implementationSteps": [
+            "Implement buildAuditEvent() helper formatting actor, action, resource, clientInfo.",
+            "Implement cryptographic prevHash chaining to ensure tamper evidence.",
+            "Implement batch insert into audit_events database table.",
+            "Expose audit event query API with pagination and filter criteria."
+          ],
+          "acceptanceCriteria": [
+            "Audit records are immutable and contain time-sortable UUIDv7 IDs.",
+            "Tamper verification utility detects altered records."
+          ]
+        },
+        {
+          "taskId": "AAA-M5-02",
+          "name": "Asynchronous Audit Buffer Queue",
+          "description": "Zero-latency in-memory batching buffer queue with backpressure protection and periodic flushing to persistence and SIEM sinks.",
+          "featureBranch": "feature/aaa-05-autha-audit-siem",
+          "dependencies": ["AAA-M5-01"],
+          "inputs": [
+            "backend/src/aaa/autha/auditLogger.ts"
+          ],
+          "outputs": [
+            "backend/src/aaa/autha/auditQueue.ts"
+          ],
+          "implementationSteps": [
+            "Implement in-memory ring buffer with configurable batch size and flush interval.",
+            "Implement backpressure dropping/spooling strategy under extreme load.",
+            "Handle process shutdown by flushing all pending events before exit."
+          ],
+          "acceptanceCriteria": [
+            "Non-blocking dispatch introduces < 1ms overhead to gateway hot-path.",
+            "Flushes all pending events on SIGTERM / SIGINT signals."
+          ]
+        },
+        {
+          "taskId": "AAA-M5-03",
+          "name": "Pluggable SIEM Exporters (Syslog, OTel, Webhook)",
+          "description": "Implement pluggable compliance exporters for enterprise SIEM ingestion (RFC 5424 Syslog TLS/TCP/UDP, OTLP structured log, and signed HMAC webhooks).",
+          "featureBranch": "feature/aaa-05-autha-audit-siem",
+          "dependencies": ["AAA-M5-01", "AAA-M5-02"],
+          "inputs": [
+            "backend/src/aaa/config.ts",
+            "backend/src/aaa/types.ts"
+          ],
+          "outputs": [
+            "backend/src/aaa/autha/exporters/syslogExporter.ts",
+            "backend/src/aaa/autha/exporters/otlpExporter.ts",
+            "backend/src/aaa/autha/exporters/webhookExporter.ts"
+          ],
+          "implementationSteps": [
+            "Implement RFC 5424 Syslog client supporting TLS, TCP, and UDP.",
+            "Implement OpenTelemetry structured log exporter using OTLP HTTP/JSON.",
+            "Implement Webhook exporter signing payload with HMAC-SHA256 and exponential backoff retry."
+          ],
+          "acceptanceCriteria": [
+            "Syslog exporter produces valid RFC 5424 formatted messages.",
+            "Webhook deliveries include X-OpenClaw-Signature HMAC header.",
+            "Exporter failures do not affect gateway request processing."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "M6",
+      "name": "Admin Management APIs, UI & Integration Suite",
+      "featureBranch": "feature/aaa-06-admin-api-ui",
+      "description": "Implement /api/aaa/* administrative management REST endpoints, frontend React management views, and automated integration test suite.",
+      "tasks": [
+        {
+          "taskId": "AAA-M6-01",
+          "name": "Administrative REST APIs",
+          "description": "Build Hono routes for tenant provisioning, hashed key administration, policy rules management, and audit log inspection.",
+          "featureBranch": "feature/aaa-06-admin-api-ui",
+          "dependencies": ["AAA-M2-01", "AAA-M3-02", "AAA-M5-01"],
+          "inputs": [
+            "backend/src/aaa/routes/tenants.ts",
+            "backend/src/aaa/routes/keys.ts",
+            "backend/src/aaa/routes/policies.ts",
+            "backend/src/aaa/routes/audit.ts"
+          ],
+          "outputs": [
+            "backend/src/aaa/routes/index.ts"
+          ],
+          "implementationSteps": [
+            "Implement CRUD routes for /api/aaa/tenants.",
+            "Implement key creation and revocation routes /api/aaa/keys.",
+            "Implement policy evaluation test and reload routes /api/aaa/policies.",
+            "Implement audit trail query route /api/aaa/audit-logs."
+          ],
+          "acceptanceCriteria": [
+            "All endpoints guarded by RBAC permissions check.",
+            "Input validation schemas enforce required parameters."
+          ]
+        },
+        {
+          "taskId": "AAA-M6-02",
+          "name": "Frontend Control Panel Views",
+          "description": "Build React dashboard views for multi-tenant switching, secure API key generation wizard, and audit log compliance viewer.",
+          "featureBranch": "feature/aaa-06-admin-api-ui",
+          "dependencies": ["AAA-M6-01"],
+          "inputs": [
+            "frontend/src/App.tsx",
+            "frontend/src/i18n.tsx"
+          ],
+          "outputs": [
+            "frontend/src/components/aaa/TenantSwitcher.tsx",
+            "frontend/src/components/aaa/KeyCreationWizard.tsx",
+            "frontend/src/pages/AuditLogs.tsx"
+          ],
+          "implementationSteps": [
+            "Create TenantSwitcher component in dashboard navbar.",
+            "Create KeyCreationWizard with scope selector and one-time secret display modal.",
+            "Create AuditLogs view with filterable table, JSON diff viewer, and export buttons."
+          ],
+          "acceptanceCriteria": [
+            "Frontend builds cleanly with npm run build --prefix frontend.",
+            "UI components handle loading, error, and empty states cleanly."
+          ]
+        },
+        {
+          "taskId": "AAA-M6-03",
+          "name": "Automated AAA Integration Test Suite",
+          "description": "Develop end-to-end integration test suite verifying AuthN, AuthZ, Rate Limiting, and Audit logging behaviors.",
+          "featureBranch": "feature/aaa-06-admin-api-ui",
+          "dependencies": ["AAA-M6-01"],
+          "inputs": [
+            "backend/src/aaa/index.ts"
+          ],
+          "outputs": [
+            "tests/e2e/aaa/authn.test.ts",
+            "tests/e2e/aaa/authz.test.ts",
+            "tests/e2e/aaa/ratelimit.test.ts",
+            "tests/e2e/aaa/audit.test.ts"
+          ],
+          "implementationSteps": [
+            "Write tests for key generation, hashing, and authentication verification.",
+            "Write tests for RBAC role enforcement and ABAC CIDR/parameter clamps.",
+            "Write tests for sliding-window 429 rate limiting and RFC 6585 headers.",
+            "Write tests for audit log generation and tamper-evident hash chaining."
+          ],
+          "acceptanceCriteria": [
+            "All tests execute against local SQLite and Memory storage with 100% pass rate.",
+            "Edge cases (expired keys, rate limits exceeded, invalid signatures) covered."
+          ]
+        }
+      ]
+    }
+  ]
+}

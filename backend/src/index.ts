@@ -22,6 +22,7 @@ import batchRoute from './routes/batch';
 import pricingRoute from './routes/pricing';
 import engineRoutes from './routes/engineConfig';
 import channelTesting from './routes/channelTesting';
+import { aaaAdminRoutes, AAASuite } from './aaa';
 import { authMiddleware } from './middleware/auth';
 import { hashPassword, verifyPassword, signAdminToken } from './utils/authSecurity';
 
@@ -32,6 +33,14 @@ const app = new Hono();
 app.use('*', logger());
 app.use('*', cors());
 
+// Initialize Enterprise AAA Suite (AuthN, AuthZ, Auditing)
+const aaaSuite = AAASuite.getInstance();
+aaaSuite.init().then(() => {
+    console.log('[TierMax AAA] Enterprise Authentication, Authorization & Accounting initialized.');
+}).catch((err) => {
+    console.warn('[TierMax AAA] Initialization warning:', err.message);
+});
+
 app.route('/api/projects', projectsRoute);
 app.route('/api/providers', upstreamKeysRoute);
 app.route('/api/gateway-keys', gatewayKeysRoute);
@@ -40,6 +49,7 @@ app.route('/api/batch', batchRoute);
 app.route('/api/pricing', pricingRoute);
 app.route('/api/engine', engineRoutes);
 app.route('/api/channels', channelTesting);
+app.route('/api/aaa', aaaAdminRoutes);
 app.route('/v1', v1Route);
 // Compatibility aliases for clients setting baseUrl with/without /v1
 app.route('/v1/v1', v1Route);
