@@ -30,6 +30,7 @@ export interface FusionExecuteOptions {
 }
 
 import { getEngineConfig } from './engineBridge';
+import { supabase } from '../db';
 
 /**
  * Default fast & diverse panel candidates in TierMax
@@ -194,16 +195,117 @@ export async function executeFusion(options: FusionExecuteOptions): Promise<{
     const engineConfig = getEngineConfig(false);
     const slotProjects = engineConfig?.fusionSlotProjects || [];
 
+    // Query upstream keys to enforce Anti-Monopoly & Paid Key Deduplication for Consensus Fusion
+    const { data: allUpstreamKeys } = await supabase
+        .from('upstream_keys')
+        .select('id, project_id, provider, billing_type, projects(name)');
+
+    const isPaidKey = (k: any) => {
+        if (!k) return false;
+        if (k.billing_type === 'paid') return true;
+        const name = (k.projects?.name || '').toLowerCase();
+        return name.includes('prim') || name.includes('premium');
+    };
+
+    const projectPaidMap = new Map<string, boolean>();
+    const projectKeysMap = new Map<string, any[]>();
+    (allUpstreamKeys || []).forEach((k: any) => {
+        if (k.project_id) {
+            if (!projectKeysMap.has(k.project_id)) projectKeysMap.set(k.project_id, []);
+            projectKeysMap.get(k.project_id)!.push(k);
+            if (isPaidKey(k)) {
+                projectPaidMap.set(k.project_id, true);
+            }
+        }
+    });
+
+    const findAlternativeFreeSource = (targetModel: string, excludeProjectIds: Set<string>): string => {
+        const modelLower = targetModel.toLowerCase();
+        let desiredProvider = 'openrouter';
+        if (modelLower.includes('mimo')) desiredProvider = 'mimo';
+        else if (modelLower.includes('gemini') || modelLower.includes('google')) desiredProvider = 'google';
+        else if (modelLower.includes('deepseek')) desiredProvider = 'deepseek';
+        else if (modelLower.includes('groq') || modelLower.includes('llama')) desiredProvider = 'groq';
+        else if (modelLower.includes('kimi')) desiredProvider = 'nvidia';
+        else if (modelLower.includes('claude') || modelLower.includes('gpt')) desiredProvider = 'puter';
+
+        for (const [pId, keys] of projectKeysMap.entries()) {
+            if (excludeProjectIds.has(pId)) continue;
+            if (projectPaidMap.get(pId)) continue;
+            const match = keys.some(k => (k.provider || '').toLowerCase() === desiredProvider && !isPaidKey(k));
+            if (match) return `project:${pId}`;
+        }
+
+        for (const [pId, keys] of projectKeysMap.entries()) {
+            if (excludeProjectIds.has(pId)) continue;
+            if (projectPaidMap.get(pId)) continue;
+            const hasFree = keys.some(k => !isPaidKey(k));
+            if (hasFree) return `project:${pId}`;
+        }
+
+        return '';
+    };
+
+    // Pre-calculate effective slot sources: NEVER dispatch multiple drafts to the same paid/premium project or key!
+    const effectiveSlotSources: string[] = [];
+    const usedPaidProjectIds = new Set<string>();
+    const usedPaidKeyIds = new Set<string>();
+
+    for (let idx = 0; idx < panel.length; idx++) {
+        const rawSource = slotProjects[idx] || '';
+        const model = panel[idx];
+        let chosenSource = rawSource;
+
+        if (rawSource.startsWith('project:')) {
+            const pId = rawSource.replace('project:', '');
+            const isPaid = projectPaidMap.get(pId);
+            if (isPaid) {
+                if (usedPaidProjectIds.has(pId)) {
+                    const altSource = findAlternativeFreeSource(model, usedPaidProjectIds);
+                    console.log(`[Fusion Anti-Monopoly] Rerouted draft ${idx + 1} (${model}) away from already-used paid project '${pId}' to '${altSource || 'free fallback'}'`);
+                    chosenSource = altSource;
+                } else {
+                    usedPaidProjectIds.add(pId);
+                }
+            }
+        } else if (rawSource.startsWith('key:')) {
+            const kId = rawSource.replace('key:', '');
+            const keyObj = (allUpstreamKeys || []).find((k: any) => k.id === kId);
+            if (isPaidKey(keyObj)) {
+                if (usedPaidKeyIds.has(kId) || (keyObj?.project_id && usedPaidProjectIds.has(keyObj.project_id))) {
+                    const altSource = findAlternativeFreeSource(model, usedPaidProjectIds);
+                    console.log(`[Fusion Anti-Monopoly] Rerouted draft ${idx + 1} (${model}) away from already-used paid key '${kId}' to '${altSource || 'free fallback'}'`);
+                    chosenSource = altSource;
+                } else {
+                    usedPaidKeyIds.add(kId);
+                    if (keyObj?.project_id) usedPaidProjectIds.add(keyObj.project_id);
+                }
+            }
+        } else if (!rawSource) {
+            const altSource = findAlternativeFreeSource(model, usedPaidProjectIds);
+            if (altSource) chosenSource = altSource;
+        }
+
+        effectiveSlotSources.push(chosenSource);
+    }
+
     // 1. Dispatch 3 drafts in parallel with per-draft 15s timeout
     const draftPromises = panel.map(async (model, idx): Promise<FusionDraft> => {
         const draftStart = Date.now();
-        const slotSource = slotProjects[idx] || '';
+        const slotSource = effectiveSlotSources[idx] || '';
+        const currentPid = slotSource.startsWith('project:') ? slotSource.replace('project:', '') : '';
+        const currentKid = slotSource.startsWith('key:') ? slotSource.replace('key:', '') : '';
+        const excludedProjects = Array.from(usedPaidProjectIds).filter(pid => pid !== currentPid);
+        const excludedKeys = Array.from(usedPaidKeyIds).filter(kid => kid !== currentKid);
+
         const draftBody = {
             ...body,
             model,
             stream: false, // Drafts are always collected in memory
             max_tokens: Math.min(body.max_tokens || 1024, 2048),
             _targetSlotSource: slotSource,
+            _fusionExcludedProjects: excludedProjects,
+            _fusionExcludedKeys: excludedKeys,
         };
         delete draftBody.stream_options;
 
@@ -268,7 +370,22 @@ export async function executeFusion(options: FusionExecuteOptions): Promise<{
     const synthesisMessages = buildDialecticalPrompt(body.messages || [], successfulDrafts);
     const bestDraft = successfulDrafts[0];
 
-    const judgeSlotSource = slotProjects[3] || '';
+    const judgeRawSource = slotProjects[3] || '';
+    let judgeSlotSource = judgeRawSource;
+    if (judgeRawSource.startsWith('project:')) {
+        const jPid = judgeRawSource.replace('project:', '');
+        if (projectPaidMap.get(jPid) && usedPaidProjectIds.has(jPid)) {
+            const altJudge = findAlternativeFreeSource(judge, usedPaidProjectIds);
+            if (altJudge) {
+                console.log(`[Fusion Anti-Monopoly] Rerouted judge away from paid project '${jPid}' to '${altJudge}'`);
+                judgeSlotSource = altJudge;
+            }
+        }
+    } else if (!judgeRawSource) {
+        const altJudge = findAlternativeFreeSource(judge, usedPaidProjectIds);
+        if (altJudge) judgeSlotSource = altJudge;
+    }
+
     const judgeBody = {
         ...body,
         model: judge,

@@ -308,32 +308,56 @@ export default function EngineSettings() {
             // Frontier tier: kimi k3, glm 5.3 flash, openai gpt 6 luna
             models = ['moonshotai/kimi-k3', 'glm-5.3-flash', 'openai/gpt-6-luna'];
             judge = 'openai/gpt-6-luna';
-            preferredProviders = ['openrouter', 'openrouter', 'openrouter', 'openrouter'];
+            // Diversified across multiple providers to prevent monopoly: Kimi (Nvidia/OpenRouter), GLM (OpenRouter), GPT (Puter/OpenRouter)
+            preferredProviders = ['nvidia', 'openrouter', 'puter', 'openrouter'];
         }
 
         const allKeys = upstreamKeysRef.current.length > 0 ? upstreamKeysRef.current : upstreamKeys;
         const newKeys: string[] = ['', '', '', ''];
         const newManual: boolean[] = [false, false, false, false];
+        const usedPaidProjectIds = new Set<string>();
+
+        // Anti-Monopoly: Sort projects so FREE projects come strictly before PAID/PREMIUM projects
+        const sortedProjects = [...projects].sort((a: any, b: any) => {
+            const aPaid = (a.billing_type === 'paid') || (a.name || '').toLowerCase().includes('prim');
+            const bPaid = (b.billing_type === 'paid') || (b.name || '').toLowerCase().includes('prim');
+            if (aPaid !== bPaid) return aPaid ? 1 : -1;
+            return 0;
+        });
 
         for (let i = 0; i < 4; i++) {
             const targetProv = preferredProviders[i];
-            let matchedProject = projects.find((proj: any) => {
+            let matchedProject = sortedProjects.find((proj: any) => {
+                const isPaid = (proj.billing_type === 'paid') || (proj.name || '').toLowerCase().includes('prim');
+                if (isPaid && usedPaidProjectIds.has(proj.id)) return false;
                 const pKeys = allKeys.filter((k: any) => k.project_id === proj.id);
                 return pKeys.some((k: any) => (k.provider || '').toLowerCase() === targetProv);
             });
             if (!matchedProject) {
-                matchedProject = projects.find((proj: any) =>
-                    (proj.name || '').toLowerCase().includes(targetProv)
-                );
+                matchedProject = sortedProjects.find((proj: any) => {
+                    const isPaid = (proj.billing_type === 'paid') || (proj.name || '').toLowerCase().includes('prim');
+                    if (isPaid && usedPaidProjectIds.has(proj.id)) return false;
+                    return (proj.name || '').toLowerCase().includes(targetProv);
+                });
             }
-            if (!matchedProject && (targetProv === 'google' || targetProv === 'openai' || targetProv === 'moonshot' || targetProv === 'zhipu')) {
-                matchedProject = projects.find((proj: any) => {
+            if (!matchedProject && (targetProv === 'google' || targetProv === 'openai' || targetProv === 'moonshot' || targetProv === 'zhipu' || targetProv === 'nvidia' || targetProv === 'puter')) {
+                matchedProject = sortedProjects.find((proj: any) => {
+                    const isPaid = (proj.billing_type === 'paid') || (proj.name || '').toLowerCase().includes('prim');
+                    if (isPaid && usedPaidProjectIds.has(proj.id)) return false;
                     const pKeys = allKeys.filter((k: any) => k.project_id === proj.id);
                     return pKeys.some((k: any) => (k.provider || '').toLowerCase() === 'openrouter');
-                }) || projects.find((proj: any) => (proj.name || '').toLowerCase().includes('open router') || (proj.name || '').toLowerCase().includes('openrouter'));
+                }) || sortedProjects.find((proj: any) => {
+                    const isPaid = (proj.billing_type === 'paid') || (proj.name || '').toLowerCase().includes('prim');
+                    if (isPaid && usedPaidProjectIds.has(proj.id)) return false;
+                    return (proj.name || '').toLowerCase().includes('open router') || (proj.name || '').toLowerCase().includes('openrouter');
+                });
             }
 
             if (matchedProject) {
+                const isPaid = (matchedProject.billing_type === 'paid') || (matchedProject.name || '').toLowerCase().includes('prim');
+                if (isPaid) {
+                    usedPaidProjectIds.add(matchedProject.id);
+                }
                 newKeys[i] = `project:${matchedProject.id}`;
                 newManual[i] = false;
                 fetchModelsForKey(`project:${matchedProject.id}`, allKeys);
@@ -1158,9 +1182,11 @@ export default function EngineSettings() {
                                 const projKeys = upstreamKeys.filter((k: any) => k.project_id === proj.id);
                                 if (projKeys.length === 0) return null;
                                 const prov = projKeys[0]?.provider?.toUpperCase() || 'CANAL';
+                                const isPaid = (proj.billing_type === 'paid') || (proj.name || '').toLowerCase().includes('prim');
+                                const badge = isPaid ? '💳 Premium' : '⚡ Gratis';
                                 return (
                                     <option key={`apply:${proj.id}`} value={`project:${proj.id}`}>
-                                        📂 {proj.name} ({prov} · {projKeys.length} {projKeys.length === 1 ? 'llave' : 'llaves'})
+                                        📂 {proj.name} ({badge} · {prov} · {projKeys.length} {projKeys.length === 1 ? 'llave' : 'llaves'})
                                     </option>
                                 );
                             })}
@@ -1244,9 +1270,11 @@ export default function EngineSettings() {
                                                 const projKeys = upstreamKeys.filter((k: any) => k.project_id === proj.id);
                                                 if (projKeys.length === 0) return null;
                                                 const prov = projKeys[0]?.provider?.toUpperCase() || 'CANAL';
+                                                const isPaid = (proj.billing_type === 'paid') || (proj.name || '').toLowerCase().includes('prim');
+                                                const badge = isPaid ? '💳 Premium' : '⚡ Gratis';
                                                 return (
                                                     <option key={`fproj:${proj.id}`} value={`project:${proj.id}`}>
-                                                        📂 {proj.name} · {prov} ({projKeys.length} {projKeys.length === 1 ? 'llave' : 'llaves con rotación'})
+                                                        📂 {proj.name} · {prov} ({badge}, {projKeys.length} {projKeys.length === 1 ? 'llave' : 'llaves'})
                                                     </option>
                                                 );
                                             })}
@@ -1254,11 +1282,15 @@ export default function EngineSettings() {
                                         <optgroup label={`🔑 ${t('engine.source_individual_keys') || 'Llaves Individuales (Fijas sin rotación)'}`}>
                                             {projects.map((proj: any) => {
                                                 const projKeys = upstreamKeys.filter((k: any) => k.project_id === proj.id);
-                                                return projKeys.map((k: any, idx: number) => (
-                                                    <option key={`fkey:${k.id}`} value={`key:${k.id}`}>
-                                                        ↳ {proj.name} · {k.provider.toUpperCase()} #{idx + 1} ({k.key_preview || 'Llave'})
-                                                    </option>
-                                                ));
+                                                return projKeys.map((k: any, idx: number) => {
+                                                    const isKeyPaid = (k.billing_type === 'paid') || (proj.name || '').toLowerCase().includes('prim');
+                                                    const keyBadge = isKeyPaid ? '💳 Premium' : '⚡ Gratis';
+                                                    return (
+                                                        <option key={`fkey:${k.id}`} value={`key:${k.id}`}>
+                                                            ↳ {proj.name} · {k.provider.toUpperCase()} #{idx + 1} ({keyBadge}, {k.key_preview || 'Llave'})
+                                                        </option>
+                                                    );
+                                                });
                                             })}
                                         </optgroup>
                                     </select>

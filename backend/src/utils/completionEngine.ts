@@ -135,14 +135,14 @@ export async function getCachedUpstreamKey(id: string): Promise<any> {
     return data;
 }
 
-export async function getCachedUpstreamMetadata(ids: string[]): Promise<Record<string, { provider: string; billing_type: string }>> {
-    const map: Record<string, { provider: string; billing_type: string }> = {};
+export async function getCachedUpstreamMetadata(ids: string[]): Promise<Record<string, { provider: string; billing_type: string; project_id?: string }>> {
+    const map: Record<string, { provider: string; billing_type: string; project_id?: string }> = {};
     const missingIds: string[] = [];
 
     for (const id of ids) {
         const cached = upstreamKeyCache.get(id);
         if (cached && cached.expiresAt > Date.now()) {
-            map[id] = { provider: cached.data.provider, billing_type: cached.data.billing_type || 'free' };
+            map[id] = { provider: cached.data.provider, billing_type: cached.data.billing_type || 'free', project_id: cached.data.project_id };
         } else {
             missingIds.push(id);
         }
@@ -156,7 +156,7 @@ export async function getCachedUpstreamMetadata(ids: string[]): Promise<Record<s
 
         (data || []).forEach((row: any) => {
             upstreamKeyCache.set(row.id, { data: row, expiresAt: Date.now() + UPSTREAM_KEY_TTL_MS });
-            map[row.id] = { provider: row.provider, billing_type: row.billing_type || 'free' };
+            map[row.id] = { provider: row.provider, billing_type: row.billing_type || 'free', project_id: row.project_id };
         });
     }
 
@@ -259,6 +259,8 @@ async function executeHighCapacityFailover({
     originalModel,
     estimatedPromptTokens,
     reason,
+    fusionExcludedKeys = [],
+    fusionExcludedProjects = [],
 }: {
     body: any;
     gatewayKey: any;
@@ -268,10 +270,12 @@ async function executeHighCapacityFailover({
     originalModel: string;
     estimatedPromptTokens: number;
     reason: string;
+    fusionExcludedKeys?: string[];
+    fusionExcludedProjects?: string[];
 }): Promise<any> {
     console.log(`[CompletionEngine] 🚨 Engaging High-Capacity Context Failover for model '${originalModel}' (${estimatedPromptTokens} tokens). Reason: ${reason}`);
 
-    // Fetch available high-capacity upstream keys (Google, DeepSeek, OpenRouter, Mistral)
+    // Fetch available high-capacity upstream keys (Google, Mimo, DeepSeek, OpenRouter, Mistral)
     const { data: projectKeys } = await supabase
         .from('upstream_keys')
         .select('*')
@@ -281,7 +285,7 @@ async function executeHighCapacityFailover({
         .from('upstream_keys')
         .select('*');
 
-    const highContextProviders = ['mimo', 'deepseek', 'openrouter', 'mistral'];
+    const highContextProviders = ['google', 'mimo', 'deepseek', 'openrouter', 'mistral'];
 
     // Combine project keys first, then gateway-wide keys
     const candidatePool = [...(projectKeys || [])];
@@ -292,18 +296,27 @@ async function executeHighCapacityFailover({
     });
 
     const eligibleKeys = candidatePool
-        .filter((k: any) => highContextProviders.includes(k.provider) && checkAndRecoverProvider(k.id) !== 'paused')
+        .filter((k: any) => {
+            if (fusionExcludedKeys.includes(k.id)) return false;
+            if (k.project_id && fusionExcludedProjects.includes(k.project_id)) return false;
+            return highContextProviders.includes(k.provider) && checkAndRecoverProvider(k.id) !== 'paused';
+        })
         .sort((a: any, b: any) => {
+            // Free tier keys ALWAYS come before paid keys!
+            const aFree = (a.billing_type === 'free' || !a.billing_type) ? 0 : 1;
+            const bFree = (b.billing_type === 'free' || !b.billing_type) ? 0 : 1;
+            if (aFree !== bFree) return aFree - bFree;
+
             const idxA = highContextProviders.indexOf(a.provider);
             const idxB = highContextProviders.indexOf(b.provider);
             return idxA - idxB;
         });
 
     if (eligibleKeys.length === 0) {
-        console.error(`[CompletionEngine] High-Capacity Failover failed: No high-capacity upstream keys (Mimo/DeepSeek/OpenRouter) available in gateway.`);
+        console.error(`[CompletionEngine] High-Capacity Failover failed: No eligible high-capacity upstream keys available in gateway.`);
         const errObj = {
             error: {
-                message: `Gateway Context Overflow: The prompt (${estimatedPromptTokens} tokens) exceeds available provider limits (413 Request Too Large), and no high-context provider (Mimo, DeepSeek, OpenRouter) is configured.`,
+                message: `Gateway Context Overflow: The prompt (${estimatedPromptTokens} tokens) exceeds available provider limits (413 Request Too Large), and no high-context provider (Google, Mimo, DeepSeek, OpenRouter) is configured.`,
                 type: 'context_overflow_error',
                 code: 'context_length_exceeded'
             }
@@ -320,7 +333,10 @@ async function executeHighCapacityFailover({
         let resolvedModel = 'mimo-v2.6-flash';
         let baseUrl = '';
 
-        if (upstream.provider === 'mimo') {
+        if (upstream.provider === 'google') {
+            resolvedModel = 'gemini-2.5-flash';
+            baseUrl = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
+        } else if (upstream.provider === 'mimo') {
             resolvedModel = 'mimo-v2.6-flash';
             baseUrl = 'https://api.xiaomimimo.com/v1/chat/completions';
         } else if (upstream.provider === 'deepseek') {
@@ -555,6 +571,12 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
     const allowedModels = gatewayKey.gateway_key_models || [];
     let requestedModel: string = body.model || '';
 
+    // Anti-Monopoly: Extract Fusion exclusions if dispatched from Virtual Consensus Fusion
+    const fusionExcludedKeys: string[] = Array.isArray(body._fusionExcludedKeys) ? body._fusionExcludedKeys : [];
+    const fusionExcludedProjects: string[] = Array.isArray(body._fusionExcludedProjects) ? body._fusionExcludedProjects : [];
+    delete body._fusionExcludedKeys;
+    delete body._fusionExcludedProjects;
+
     if (isInternalCall && !returnRawStream) {
         body.stream = false;
     }
@@ -572,8 +594,10 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
                 .from('upstream_keys')
                 .select('id, provider')
                 .eq('project_id', projId);
-            if (projKeys && projKeys.length > 0) {
-                const sampleProvider = projKeys[0].provider;
+            
+            const activeProjKeys = (projKeys || []).filter((k: any) => !fusionExcludedKeys.includes(k.id));
+            if (activeProjKeys.length > 0) {
+                const sampleProvider = activeProjKeys[0].provider;
                 // Auto-heal model if provider cannot service requested model
                 if (sampleProvider === 'mimo' && !requestedModel.toLowerCase().includes('mimo')) {
                     console.log(`[CompletionEngine] Auto-healing slot model '${requestedModel}' for Mimo channel to 'mimo-v2.6-flash'`);
@@ -583,13 +607,17 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
                     console.log(`[CompletionEngine] Auto-healing slot model '${requestedModel}' for DeepSeek channel to 'deepseek-chat'`);
                     requestedModel = 'deepseek-chat';
                     body.model = requestedModel;
+                } else if (sampleProvider === 'google' && (requestedModel.toLowerCase().includes('gemini-3.8') || requestedModel.toLowerCase().includes('gemini-3'))) {
+                    console.log(`[CompletionEngine] Auto-healing slot model '${requestedModel}' for Google channel to 'gemini-2.5-flash'`);
+                    requestedModel = 'gemini-2.5-flash';
+                    body.model = requestedModel;
                 } else if (sampleProvider === 'openrouter' && (requestedModel.includes('max-prime') || requestedModel.includes('qwen3.8-max'))) {
                     console.log(`[CompletionEngine] Auto-healing '${requestedModel}' for OpenRouter channel to 'qwen/qwen-2.5-72b-instruct'`);
                     requestedModel = 'qwen/qwen-2.5-72b-instruct';
                     body.model = requestedModel;
                 }
 
-                allowed = projKeys.map((k: any) => ({
+                allowed = activeProjKeys.map((k: any) => ({
                     upstream_key_id: k.id,
                     model_name: requestedModel,
                     upstream_model_name: null,
@@ -597,11 +625,13 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
             }
         } else {
             const keyId = targetSource.replace('key:', '');
-            allowed = [{
-                upstream_key_id: keyId,
-                model_name: requestedModel,
-                upstream_model_name: null,
-            }];
+            if (!fusionExcludedKeys.includes(keyId)) {
+                allowed = [{
+                    upstream_key_id: keyId,
+                    model_name: requestedModel,
+                    upstream_model_name: null,
+                }];
+            }
         }
     }
 
@@ -613,36 +643,51 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
             .select('upstream_key_id, model_name, upstream_model_name')
             .eq('model_name', requestedModel);
 
-        if (globalMatches && globalMatches.length > 0) {
-            allowed = globalMatches;
+        const cleanGlobalMatches = (globalMatches || []).filter((m: any) => !fusionExcludedKeys.includes(m.upstream_key_id));
+
+        if (cleanGlobalMatches.length > 0) {
+            allowed = cleanGlobalMatches;
         } else {
             // 2. Provider-heuristic lookup across all upstream_keys in the gateway
             const { data: allUpstreams } = await supabase
                 .from('upstream_keys')
-                .select('id, provider');
+                .select('id, provider, billing_type, project_id');
+
+            const candidateUpstreams = (allUpstreams || []).filter((k: any) => {
+                if (fusionExcludedKeys.includes(k.id)) return false;
+                if (k.project_id && fusionExcludedProjects.includes(k.project_id)) return false;
+                return true;
+            });
 
             let matchingGlobal: any[] = [];
             const reqLower = requestedModel.toLowerCase();
             if (reqLower.includes('mimo')) {
-                matchingGlobal = (allUpstreams || []).filter((k: any) => k.provider === 'mimo');
+                matchingGlobal = candidateUpstreams.filter((k: any) => k.provider === 'mimo');
             } else if (reqLower.includes('deepseek')) {
-                matchingGlobal = (allUpstreams || []).filter((k: any) => k.provider === 'deepseek');
+                matchingGlobal = candidateUpstreams.filter((k: any) => k.provider === 'deepseek');
             } else if (reqLower.includes('gemini') || reqLower.includes('google')) {
-                matchingGlobal = (allUpstreams || []).filter((k: any) => k.provider === 'google' || k.provider === 'vertex');
+                matchingGlobal = candidateUpstreams.filter((k: any) => k.provider === 'google' || k.provider === 'vertex');
             } else if (reqLower.includes('groq') || reqLower.includes('llama')) {
-                matchingGlobal = (allUpstreams || []).filter((k: any) => k.provider === 'groq');
+                matchingGlobal = candidateUpstreams.filter((k: any) => k.provider === 'groq');
             } else if (reqLower.includes('qwen') || reqLower.includes('cerebras')) {
-                matchingGlobal = (allUpstreams || []).filter((k: any) => k.provider === 'cerebras' || k.provider === 'groq');
+                matchingGlobal = candidateUpstreams.filter((k: any) => k.provider === 'cerebras' || k.provider === 'groq');
             } else if (reqLower.includes('mistral') || reqLower.includes('codestral')) {
-                matchingGlobal = (allUpstreams || []).filter((k: any) => k.provider === 'mistral');
+                matchingGlobal = candidateUpstreams.filter((k: any) => k.provider === 'mistral');
             } else if (reqLower.includes('claude')) {
-                matchingGlobal = (allUpstreams || []).filter((k: any) => k.provider === 'puter');
+                matchingGlobal = candidateUpstreams.filter((k: any) => k.provider === 'puter');
             }
 
             if (matchingGlobal.length === 0) {
                 // Fallback to openrouter
-                matchingGlobal = (allUpstreams || []).filter((k: any) => k.provider === 'openrouter');
+                matchingGlobal = candidateUpstreams.filter((k: any) => k.provider === 'openrouter');
             }
+
+            // Anti-Monopoly: Always prioritize free keys before paid keys!
+            matchingGlobal.sort((a: any, b: any) => {
+                const aFree = (a.billing_type === 'free' || !a.billing_type) ? 0 : 1;
+                const bFree = (b.billing_type === 'free' || !b.billing_type) ? 0 : 1;
+                return aFree - bFree;
+            });
 
             if (matchingGlobal.length > 0) {
                 allowed = matchingGlobal.map((k: any) => ({
@@ -807,21 +852,35 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
         ...m,
         provider: metaMap[m.upstream_key_id]?.provider || 'unknown',
         billing_type: metaMap[m.upstream_key_id]?.billing_type || 'free',
+        project_id: metaMap[m.upstream_key_id]?.project_id,
     }));
+
+    // Anti-Monopoly: Filter out excluded projects and keys from Fusion
+    let viableCandidates = enrichedCandidates;
+    if (fusionExcludedKeys.length > 0 || fusionExcludedProjects.length > 0) {
+        const nonExcluded = enrichedCandidates.filter((cand: any) => {
+            if (fusionExcludedKeys.includes(cand.upstream_key_id)) return false;
+            if (cand.project_id && fusionExcludedProjects.includes(cand.project_id)) return false;
+            return true;
+        });
+        if (nonExcluded.length > 0) {
+            viableCandidates = nonExcluded;
+        }
+    }
 
     const estimatedTok = estimateTokenCount(body.messages || [], body.tools || []);
     const jevDecision = await consultSystemOne({
         messages: body.messages || [],
         tools: body.tools || [],
         model: requestedModel,
-        candidateCount: enrichedCandidates.length,
-        hasNearLimitKeys: enrichedCandidates.some((m: any) => {
+        candidateCount: viableCandidates.length,
+        hasNearLimitKeys: viableCandidates.some((m: any) => {
             const st = getOrCreateKeyState(m.upstream_key_id, m.provider);
             return st.status === 'near_limit' || st.status === 'throttled';
         }),
     });
     const routingTier = jevDecision.tier;
-    candidates = filterCandidatesByTier(routingTier, enrichedCandidates);
+    candidates = filterCandidatesByTier(routingTier, viableCandidates);
 
     // Free Tier Priority Engine: Separate free tier keys and paid/premium keys.
     // Free keys are rotated via round-robin; paid keys are placed strictly as secondary fallbacks!
@@ -894,6 +953,8 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
             originalModel: requestedModel,
             estimatedPromptTokens,
             reason: `Groq free tier 7000 ITPM limit exceeded by prompt (${estimatedPromptTokens} tokens)`,
+            fusionExcludedKeys,
+            fusionExcludedProjects,
         });
     }
 
@@ -1121,6 +1182,12 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
 
         // Google / Vertex normalization
         if (upstream.provider === 'google' || upstream.provider === 'vertex' || (upstream.provider === 'kie' && requestedModel.includes('gemini'))) {
+            if (forwardBody.model && forwardBody.model.startsWith('google/')) {
+                forwardBody.model = forwardBody.model.replace('google/', '');
+            }
+            if (forwardBody.model && (forwardBody.model.includes('3.8') || forwardBody.model.includes('3.0'))) {
+                forwardBody.model = 'gemini-2.5-flash';
+            }
             if (forwardBody.max_completion_tokens && !forwardBody.max_tokens) {
                 forwardBody.max_tokens = forwardBody.max_completion_tokens;
             }
@@ -1172,8 +1239,13 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
         if (!forwardBody.stream) {
             delete forwardBody.stream_options;
         }
-        if (upstream.provider === 'deepseek' && !forwardBody.stream) {
+        if (upstream.provider === 'deepseek') {
             delete forwardBody.stream_options;
+            if (forwardBody.model && forwardBody.model.includes('reasoner')) {
+                forwardBody.model = 'deepseek-reasoner';
+            } else if (forwardBody.model && (forwardBody.model.includes('v4') || forwardBody.model !== 'deepseek-chat')) {
+                forwardBody.model = 'deepseek-chat';
+            }
         }
 
         try {
@@ -1444,6 +1516,8 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
                 originalModel: requestedModel,
                 estimatedPromptTokens,
                 reason: `Upstream candidates failed with 413 / Request Too Large (${finalErrorMsg || 'Exceeded context or ITPM limits'})`,
+                fusionExcludedKeys,
+                fusionExcludedProjects,
             });
         }
 
