@@ -5,6 +5,7 @@ import { authMiddleware } from '../middleware/auth';
 import { pauseProvider } from '../utils/limitTracker';
 import { getProjectHistory, repairProjectChannels } from '../utils/modelHealing';
 import { dashboardEvents } from '../utils/dashboardEvents';
+import { getCuratedModelsForProvider } from '../utils/providerCatalog';
 
 const projects = new Hono();
 
@@ -316,6 +317,12 @@ projects.get('/:id/models', async (c) => {
             .filter(Boolean);
         modelsByKey[gk.id] = keyModels;
         keyModels.forEach((m: string) => modelSet.add(m));
+    });
+
+    // Also populate models from the project's upstream providers
+    (upstreamList || []).forEach((u: any) => {
+        const providerModels = getCuratedModelsForProvider(u.provider);
+        providerModels.forEach((m: string) => modelSet.add(m));
     });
 
     return c.json({

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { fetchApi } from '../api';
 import {
     Check, AlertCircle, RefreshCw, Save, ExternalLink, Play
@@ -40,6 +40,30 @@ const PROVIDER_BASE_URLS: Record<string, string> = {
     puter: 'https://api.puter.com/v1',
 };
 
+const PROVIDER_MODELS_FALLBACK: Record<string, string[]> = {
+    mimo: ['mimo-v2.6-flash', 'mimo-v2.6-pro', 'xiaomi/mimo-v2.6-pro', 'mimo-v2-flash', 'mimo-v2-pro'],
+    deepseek: ['deepseek-chat', 'deepseek-reasoner', 'deepseek-coder', 'deepseek-v4-flash', 'deepseek-v4-pro'],
+    groq: ['qwen/qwen3.8-27b', 'deepseek-r1-distill-llama-70b', 'llama-3.3-70b-versatile', 'qwen/qwen3.6-27b', 'openai/gpt-oss-120b', 'whisper-large-v3'],
+    openai: ['gpt-4o', 'gpt-4o-mini', 'o1', 'o3-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
+    google: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'],
+    vertex: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-pro'],
+    vertexai: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-pro'],
+    nvidia: ['moonshotai/kimi-k3', 'minimaxai/minimax-m3', 'meta/llama-3.3-70b-instruct', 'deepseek-ai/deepseek-v4-flash-0731', 'google/gemma-4-31b-it', 'moonshotai/kimi-k2.6'],
+    mistral: ['mistral-large-latest', 'mistral-medium-latest', 'mistral-small-latest', 'codestral-latest', 'open-mistral-nemo'],
+    cerebras: ['llama-3.3-70b', 'llama-3.1-8b', 'llama3.3-70b', 'llama3.1-8b'],
+    openrouter: ['openrouter/auto', 'deepseek/deepseek-chat', 'deepseek/deepseek-r1', 'anthropic/claude-3.5-sonnet', 'meta-llama/llama-3.3-70b-instruct'],
+    minimax: ['MiniMax-Text-01', 'abab6.5s-chat', 'abab6.5-chat', 'abab6.5g-chat'],
+    moonshot: ['moonshot-v1-8k', 'moonshot-v1-32k', 'kimi-latest', 'kimi-thinking-preview'],
+    kie: ['gpt-5-2', 'gpt-5-2-pro', 'gemini-2.5-flash', 'claude-3-7-sonnet-20250219', 'deepseek-chat', 'deepseek-reasoner'],
+    puter: ['gpt-4o', 'gpt-4o-mini', 'claude-sonnet-4-5', 'deepseek/deepseek-chat', 'meta-llama/llama-3.3-70b-instruct'],
+    zettacore: ['arena-claude-opus-4-6', 'arena-gpt-4o', 'gemini-web', 'chatgpt-web', 'qwen-web'],
+    vercel: ['openai/gpt-4o', 'openai/gpt-4o-mini', 'anthropic/claude-3-7-sonnet-20250219', 'deepseek/deepseek-chat'],
+    ollama: ['qwen2.5-coder:latest', 'llama3.2:latest', 'deepseek-r1:latest', 'mistral:latest'],
+    lmstudio: ['local-model', 'default'],
+    vllm: ['default'],
+    local: ['default'],
+};
+
 export default function EngineSettings() {
     const { t } = useLanguage();
     const [config, setConfig] = useState<EngineConfig>({
@@ -68,6 +92,7 @@ export default function EngineSettings() {
     // Project & Upstream Key Providers
     const [projects, setProjects] = useState<any[]>([]);
     const [upstreamKeys, setUpstreamKeys] = useState<any[]>([]);
+    const upstreamKeysRef = useRef<any[]>([]);
     const [apiModels, setApiModels] = useState<string[]>([]);
     const [loadingModels, setLoadingModels] = useState(false);
     const [isCustomModel, setIsCustomModel] = useState(false);
@@ -96,26 +121,40 @@ export default function EngineSettings() {
         loadConfig();
     }, []);
 
-    const fetchModelsForKey = async (sourceId: string): Promise<string[]> => {
+    const fetchModelsForKey = async (sourceId: string, currentKeys?: any[]): Promise<string[]> => {
         if (!sourceId) return [];
         if (modelsCache[sourceId] && modelsCache[sourceId].length > 0) {
             return modelsCache[sourceId];
         }
         setLoadingKeyModels(prev => ({ ...prev, [sourceId]: true }));
         try {
+            const keysPool = currentKeys || (upstreamKeysRef.current.length > 0 ? upstreamKeysRef.current : upstreamKeys);
             let modelsList: string[] = [];
+
             if (sourceId.startsWith('project:')) {
                 const projId = sourceId.replace('project:', '');
+                const projKeys = keysPool.filter((k: any) => k.project_id === projId);
+
+                // Curated fallback for project providers for instant feedback
+                projKeys.forEach((pk: any) => {
+                    const prov = (pk.provider || '').toLowerCase();
+                    const curated = PROVIDER_MODELS_FALLBACK[prov] || [];
+                    curated.forEach(m => {
+                        if (!modelsList.includes(m)) modelsList.push(m);
+                    });
+                });
+
                 // 1. Try project models endpoint
                 try {
                     const projRes = await fetchApi(`/projects/${projId}/models`);
                     if (projRes?.models && Array.isArray(projRes.models) && projRes.models.length > 0) {
-                        modelsList = projRes.models;
+                        projRes.models.forEach((m: string) => {
+                            if (!modelsList.includes(m)) modelsList.push(m);
+                        });
                     }
                 } catch {}
 
                 // 2. Query upstream keys of this project to get full available catalog
-                const projKeys = upstreamKeys.filter((k: any) => k.project_id === projId);
                 for (const pk of projKeys) {
                     try {
                         const res = await fetchApi(`/providers/${pk.id}/models`);
@@ -123,13 +162,25 @@ export default function EngineSettings() {
                         kModels.forEach((m: string) => {
                             if (!modelsList.includes(m)) modelsList.push(m);
                         });
-                        if (modelsList.length > 0) break;
                     } catch {}
                 }
-            } else {
+            } else if (sourceId.startsWith('key:')) {
                 const keyId = sourceId.replace('key:', '');
-                const res = await fetchApi(`/providers/${keyId}/models`);
-                modelsList = (res?.models || []).map((m: any) => typeof m === 'string' ? m : m.id || m.name).filter(Boolean);
+                const targetKey = keysPool.find((k: any) => k.id === keyId);
+                if (targetKey) {
+                    const prov = (targetKey.provider || '').toLowerCase();
+                    const curated = PROVIDER_MODELS_FALLBACK[prov] || [];
+                    curated.forEach(m => {
+                        if (!modelsList.includes(m)) modelsList.push(m);
+                    });
+                }
+                try {
+                    const res = await fetchApi(`/providers/${keyId}/models`);
+                    const kModels = (res?.models || []).map((m: any) => typeof m === 'string' ? m : m.id || m.name).filter(Boolean);
+                    kModels.forEach((m: string) => {
+                        if (!modelsList.includes(m)) modelsList.push(m);
+                    });
+                } catch {}
             }
 
             setModelsCache(prev => ({ ...prev, [sourceId]: modelsList }));
@@ -186,20 +237,27 @@ export default function EngineSettings() {
                 ? config.fusionDefaultJudge
                 : (config.fusionDefaultModels?.[slotIndex] || '');
 
-            if (!currentVal || !models.includes(currentVal)) {
-                const preferred = models.find((m: string) =>
+            let preferred: string;
+            if (currentVal && models.includes(currentVal)) {
+                preferred = currentVal;
+            } else if (slotIndex === 3) {
+                preferred = models.find((m: string) =>
+                    m.includes('pro') || m.includes('plus') || m.includes('chat') || m.includes('reasoner')
+                ) || models[0];
+            } else {
+                preferred = models[slotIndex % models.length] || models.find((m: string) =>
                     m.includes('flash') || m.includes('mini') || m.includes('chat') || m.includes('versatile')
                 ) || models[0];
+            }
 
-                if (slotIndex === 3) {
-                    setConfig(prev => ({ ...prev, fusionDefaultJudge: preferred, fusionSlotProjects: updatedKeys }));
-                } else {
-                    setConfig(prev => {
-                        const next = [...(prev.fusionDefaultModels || ['deepseek-chat', 'qwen/qwen3.8-27b', 'moonshotai/kimi-k3'])];
-                        next[slotIndex] = preferred;
-                        return { ...prev, fusionDefaultModels: next, fusionSlotProjects: updatedKeys };
-                    });
-                }
+            if (slotIndex === 3) {
+                setConfig(prev => ({ ...prev, fusionDefaultJudge: preferred, fusionSlotProjects: updatedKeys }));
+            } else {
+                setConfig(prev => {
+                    const next = [...(prev.fusionDefaultModels || ['deepseek-chat', 'qwen/qwen3.8-27b', 'moonshotai/kimi-k3'])];
+                    next[slotIndex] = preferred;
+                    return { ...prev, fusionDefaultModels: next, fusionSlotProjects: updatedKeys };
+                });
             }
         }
     };
@@ -216,7 +274,7 @@ export default function EngineSettings() {
                 const m1 = models[0];
                 const m2 = models[Math.min(1, models.length - 1)];
                 const m3 = models[Math.min(2, models.length - 1)];
-                const judge = models.find((m: string) => m.includes('pro') || m.includes('plus') || m.includes('chat')) || models[0];
+                const judge = models.find((m: string) => m.includes('pro') || m.includes('plus') || m.includes('chat') || m.includes('reasoner')) || models[0];
                 return {
                     ...prev,
                     fusionDefaultModels: [m1, m2, m3],
@@ -258,6 +316,7 @@ export default function EngineSettings() {
 
             setProjects(projectsData || []);
             setUpstreamKeys(providersData || []);
+            upstreamKeysRef.current = providersData || [];
 
             if (data) {
                 setConfig(data);
@@ -288,7 +347,7 @@ export default function EngineSettings() {
                     });
                     setFusionSlotKeys(normalized);
                     normalized.forEach((src: string) => {
-                        if (src) fetchModelsForKey(src);
+                        if (src) fetchModelsForKey(src, providersData || []);
                     });
                     const initialManual = normalized.map((k: string) => !k);
                     setFusionSlotManual(initialManual);
@@ -1127,13 +1186,14 @@ export default function EngineSettings() {
                                             {t('engine.manager_model') || 'Modelo'}:
                                         </span>
                                         {slotModels.length > 0 && !isManual && (
-                                            <span style={{ fontSize: '0.66rem', color: 'var(--brand-orange)', fontWeight: 600 }}>
+                                            <span style={{ fontSize: '0.66rem', color: 'var(--brand-orange)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                                {isLoadingModels && <RefreshCw size={10} className="spin" />}
                                                 ({slotModels.length} {t('engine.models_available') || 'disponibles'})
                                             </span>
                                         )}
                                     </div>
 
-                                    {isLoadingModels ? (
+                                    {isLoadingModels && slotModels.length === 0 ? (
                                         <div style={{
                                             display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.38rem 0.5rem',
                                             background: 'var(--surface-2)', border: '1px solid var(--border-subtle)', borderRadius: 6,

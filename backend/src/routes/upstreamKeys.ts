@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { supabase } from '../db';
 import { authMiddleware } from '../middleware/auth';
 import { PUTER_MODELS } from '../utils/puterClient';
+import { getCuratedModelsForProvider } from '../utils/providerCatalog';
 
 const upstreamKeys = new Hono();
 
@@ -260,7 +261,30 @@ upstreamKeys.get('/:id/models', async (c) => {
     try {
         // 2. Query provider API for models
         let url = '';
-        if (keyData.provider === 'openai') url = 'https://api.openai.com/v1/models';
+        if (keyData.provider === 'openai') {
+            try {
+                const res = await fetch('https://api.openai.com/v1/models', {
+                    headers: { 'Authorization': `Bearer ${keyData.api_key}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    const models = (data.data || []).map((m: any) => ({ id: m.id }));
+                    if (models.length > 0) return c.json({ models });
+                }
+            } catch (err: any) {
+                console.warn(`[Models] OpenAI API error (${err.message}) — using curated fallback list`);
+            }
+            return c.json({
+                models: [
+                    { id: 'gpt-4o' },
+                    { id: 'gpt-4o-mini' },
+                    { id: 'o1' },
+                    { id: 'o3-mini' },
+                    { id: 'gpt-4-turbo' },
+                    { id: 'gpt-3.5-turbo' },
+                ]
+            });
+        }
         else if (keyData.provider === 'groq') {
             try {
                 const groqRes = await fetch('https://api.groq.com/openai/v1/models', {
@@ -299,9 +323,75 @@ upstreamKeys.get('/:id/models', async (c) => {
                 ]
             });
         }
-        else if (keyData.provider === 'openrouter') url = 'https://openrouter.ai/api/v1/models';
-        else if (keyData.provider === 'mimo') url = 'https://api.xiaomimimo.com/v1/models';
-        else if (keyData.provider === 'cerebras') url = 'https://api.cerebras.ai/v1/models';
+        else if (keyData.provider === 'openrouter') {
+            try {
+                const orRes = await fetch('https://openrouter.ai/api/v1/models', {
+                    headers: { 'Authorization': `Bearer ${keyData.api_key}` }
+                });
+                if (orRes.ok) {
+                    const orData = await orRes.json();
+                    const models = (orData.data || []).map((m: any) => ({ id: m.id }));
+                    if (models.length > 0) return c.json({ models });
+                }
+            } catch (err: any) {
+                console.warn(`[Models] OpenRouter API error (${err.message}) — using curated fallback list`);
+            }
+            return c.json({
+                models: [
+                    { id: 'openrouter/auto' },
+                    { id: 'deepseek/deepseek-chat' },
+                    { id: 'deepseek/deepseek-r1' },
+                    { id: 'anthropic/claude-3.5-sonnet' },
+                    { id: 'meta-llama/llama-3.3-70b-instruct' },
+                    { id: 'google/gemini-2.0-flash-exp:free' },
+                ]
+            });
+        }
+        else if (keyData.provider === 'mimo') {
+            try {
+                const mimoRes = await fetch('https://api.xiaomimimo.com/v1/models', {
+                    headers: { 'Authorization': `Bearer ${keyData.api_key}` }
+                });
+                if (mimoRes.ok) {
+                    const mimoData = await mimoRes.json();
+                    const models = (mimoData.data || mimoData.models || []).map((m: any) => ({ id: m.id || m.name }));
+                    if (models.length > 0) return c.json({ models });
+                }
+            } catch (err: any) {
+                console.warn(`[Models] MIMO API error (${err.message}) — using curated fallback list`);
+            }
+            return c.json({
+                models: [
+                    { id: 'mimo-v2.6-flash' },
+                    { id: 'mimo-v2.6-pro' },
+                    { id: 'xiaomi/mimo-v2.6-pro' },
+                    { id: 'mimo-v2-flash' },
+                    { id: 'mimo-v2-pro' },
+                ]
+            });
+        }
+        else if (keyData.provider === 'cerebras') {
+            try {
+                const cerRes = await fetch('https://api.cerebras.ai/v1/models', {
+                    headers: { 'Authorization': `Bearer ${keyData.api_key}` }
+                });
+                if (cerRes.ok) {
+                    const cerData = await cerRes.json();
+                    const models = (cerData.data || []).map((m: any) => ({ id: m.id }));
+                    if (models.length > 0) return c.json({ models });
+                }
+            } catch (err: any) {
+                console.warn(`[Models] Cerebras API error (${err.message}) — using curated fallback list`);
+            }
+            return c.json({
+                models: [
+                    { id: 'llama-3.3-70b' },
+                    { id: 'llama-3.1-8b' },
+                    { id: 'llama3.3-70b' },
+                    { id: 'llama3.1-8b' },
+                ]
+            });
+        }
         else if (keyData.provider === 'mistral') {
             // Try Mistral API first; fall back to curated list if the key is invalid or rate-limited
             try {
@@ -596,23 +686,28 @@ upstreamKeys.get('/:id/models', async (c) => {
                 ]
             });
         }
-        else return c.json({ models: [] }); // default fallback
+        else if (url) {
+            const response = await fetch(url, {
+                headers: {
+                    'Authorization': `Bearer ${keyData.api_key}`
+                }
+            });
 
-        const response = await fetch(url, {
-            headers: {
-                'Authorization': `Bearer ${keyData.api_key}`
+            if (response.ok) {
+                const result = await response.json();
+                const list = result.data || result.models || [];
+                if (Array.isArray(list) && list.length > 0) {
+                    return c.json({ models: list.map((m: any) => ({ id: typeof m === 'string' ? m : m.id || m.name })) });
+                }
             }
-        });
-
-        if (!response.ok) {
-            throw new Error(`Provider returned ${response.status}`);
         }
 
-        const result = await response.json();
-        return c.json({ models: result.data || [] });
+        const fallback = getCuratedModelsForProvider(keyData.provider);
+        return c.json({ models: fallback.map(id => ({ id })) });
     } catch (err: any) {
-        console.error('Error fetching models for key', id, 'Provider:', keyData.provider, err);
-        return c.json({ error: err.message }, 500);
+        console.warn(`[Models] Exception fetching models for key ${id} (${keyData?.provider}): ${err?.message || err} — using curated fallback list`);
+        const fallback = getCuratedModelsForProvider(keyData?.provider || '');
+        return c.json({ models: fallback.map(id => ({ id })) });
     }
 });
 
