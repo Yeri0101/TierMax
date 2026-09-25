@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { fetchApi } from '../api';
-import { FolderOpen, Plus, Trash2, Edit2, Zap, Key, Activity, Copy, Check, DollarSign, HelpCircle } from 'lucide-react';
+import { FolderOpen, Plus, Trash2, Edit2, Zap, Key, Activity, Copy, Check, DollarSign, HelpCircle, BarChart3 } from 'lucide-react';
 import { TierMaxLogo, AnthropicIcon, RouterCascadeGlyph, DualEngineGlyph } from '../components/Icons';
 import { useLanguage } from '../i18n';
 import { useToast } from '../ToastContext';
@@ -407,74 +407,95 @@ export default function Dashboard() {
                 </div>
 
                 <div className="recent-calls-panel">
-                    <div className="flex items-center gap-2" style={{ marginBottom: '0.5rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                        <button
-                            type="button"
-                            onClick={toggleStrictFreeMode}
-                            title={strictFreeMode ? "Modo Gratuito Estricto: ACTIVO (100% Gratis). Clic para cambiar a Modo Híbrido." : "Modo Híbrido: Llaves de pago permitidas como último recurso. Clic para activar Modo Gratuito Estricto."}
-                            style={{
-                                padding: '0.18rem 0.6rem',
-                                fontSize: '0.68rem',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '0.35rem',
-                                borderRadius: 'var(--radius-pill)',
-                                background: strictFreeMode ? 'rgba(34,197,94,0.12)' : 'rgba(255,170,0,0.12)',
-                                border: `1px solid ${strictFreeMode ? 'rgba(34,197,94,0.3)' : 'rgba(255,170,0,0.3)'}`,
-                                color: strictFreeMode ? '#22c55e' : 'var(--brand-amber)',
-                                cursor: 'pointer',
-                                fontWeight: 700,
-                                textTransform: 'uppercase',
-                                letterSpacing: '0.04em'
-                            }}
-                        >
-                            <span>{strictFreeMode ? '⚡ MODO GRATUITO' : '💳 MODO HÍBRIDO'}</span>
-                        </button>
-                        <button
-                            onClick={() => setIsInspectorOpen(true)}
-                            className="btn btn-secondary"
-                            style={{
-                                padding: '0.15rem 0.55rem',
-                                fontSize: '0.7rem',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '0.35rem',
-                                borderRadius: 'var(--radius-pill)',
-                                background: 'var(--surface-card)',
-                                border: '1px solid var(--border-default)',
-                                color: 'var(--text-secondary)',
-                                cursor: 'pointer',
-                                fontWeight: 600,
-                            }}
-                        >
-                            <Zap size={11} /> {t('dashboard.live_inspector')}
-                        </button>
-                        <span style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '0.35rem',
-                            fontSize: '0.68rem',
-                            fontWeight: 700,
-                            letterSpacing: '0.04em',
-                            color: isLiveConnected ? '#22c55e' : 'var(--brand-amber)',
-                            background: isLiveConnected ? 'rgba(34,197,94,0.1)' : 'rgba(255,170,0,0.1)',
-                            border: `1px solid ${isLiveConnected ? 'rgba(34,197,94,0.25)' : 'rgba(255,170,0,0.25)'}`,
-                            borderRadius: 'var(--radius-pill)',
-                            padding: '0.15rem 0.5rem',
-                            textTransform: 'uppercase'
-                        }}>
+                    <div className="flex items-center justify-between" style={{ marginBottom: '0.65rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                            <Activity size={16} style={{ color: 'var(--text-secondary)' }} />
+                            <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700 }}>{t('dashboard.recent_calls')}</h3>
+                        </div>
+                        <div className="flex items-center gap-2" style={{ flexWrap: 'wrap' }}>
+                            <Link
+                                to="/analytics"
+                                className="btn btn-secondary"
+                                style={{
+                                    padding: '0.15rem 0.55rem',
+                                    fontSize: '0.7rem',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.35rem',
+                                    borderRadius: 'var(--radius-pill)',
+                                    textDecoration: 'none',
+                                    color: 'var(--text-primary)',
+                                    fontWeight: 600,
+                                }}
+                            >
+                                <BarChart3 size={11} /> {t('dashboard.view_all_calls')} →
+                            </Link>
+                            <button
+                                type="button"
+                                onClick={toggleStrictFreeMode}
+                                title={strictFreeMode ? "Modo Gratuito Estricto: ACTIVO (100% Gratis). Clic para cambiar a Modo Híbrido." : "Modo Híbrido: Llaves de pago permitidas como último recurso. Clic para activar Modo Gratuito Estricto."}
+                                style={{
+                                    padding: '0.18rem 0.6rem',
+                                    fontSize: '0.68rem',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.35rem',
+                                    borderRadius: 'var(--radius-pill)',
+                                    background: strictFreeMode ? 'rgba(34,197,94,0.12)' : 'rgba(255,170,0,0.12)',
+                                    border: `1px solid ${strictFreeMode ? 'rgba(34,197,94,0.3)' : 'rgba(255,170,0,0.3)'}`,
+                                    color: strictFreeMode ? '#22c55e' : 'var(--brand-amber)',
+                                    cursor: 'pointer',
+                                    fontWeight: 700,
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.04em'
+                                }}
+                            >
+                                <span>{strictFreeMode ? '⚡ MODO GRATUITO' : '💳 MODO HÍBRIDO'}</span>
+                            </button>
+                            <button
+                                onClick={() => setIsInspectorOpen(true)}
+                                className="btn btn-secondary"
+                                style={{
+                                    padding: '0.15rem 0.55rem',
+                                    fontSize: '0.7rem',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.35rem',
+                                    borderRadius: 'var(--radius-pill)',
+                                    background: 'var(--surface-card)',
+                                    border: '1px solid var(--border-default)',
+                                    color: 'var(--text-secondary)',
+                                    cursor: 'pointer',
+                                    fontWeight: 600,
+                                }}
+                            >
+                                <Zap size={11} /> {t('dashboard.live_inspector')}
+                            </button>
                             <span style={{
-                                width: 6,
-                                height: 6,
-                                borderRadius: '50%',
-                                background: isLiveConnected ? '#22c55e' : 'var(--brand-amber)',
-                                boxShadow: isLiveConnected ? '0 0 6px #22c55e' : 'none',
-                                display: 'inline-block'
-                            }} />
-                            {isLiveConnected ? 'REAL-TIME' : 'POLLING'}
-                        </span>
-                        <Activity size={16} style={{ color: 'var(--text-secondary)' }} />
-                        <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700 }}>{t('dashboard.recent_calls')}</h3>
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.35rem',
+                                fontSize: '0.68rem',
+                                fontWeight: 700,
+                                letterSpacing: '0.04em',
+                                color: isLiveConnected ? '#22c55e' : 'var(--brand-amber)',
+                                background: isLiveConnected ? 'rgba(34,197,94,0.1)' : 'rgba(255,170,0,0.1)',
+                                border: `1px solid ${isLiveConnected ? 'rgba(34,197,94,0.25)' : 'rgba(255,170,0,0.25)'}`,
+                                borderRadius: 'var(--radius-pill)',
+                                padding: '0.15rem 0.5rem',
+                                textTransform: 'uppercase'
+                            }}>
+                                <span style={{
+                                    width: 6,
+                                    height: 6,
+                                    borderRadius: '50%',
+                                    background: isLiveConnected ? '#22c55e' : 'var(--brand-amber)',
+                                    boxShadow: isLiveConnected ? '0 0 6px #22c55e' : 'none',
+                                    display: 'inline-block'
+                                }} />
+                                {isLiveConnected ? 'REAL-TIME' : 'POLLING'}
+                            </span>
+                        </div>
                     </div>
                     <div className="recent-calls-grid">
                     {recentCallCards.map((call, index) => (

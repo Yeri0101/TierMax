@@ -1,7 +1,7 @@
 import { useState, Component } from 'react';
 import type { ReactNode } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { Sun, Moon, LayoutDashboard, ShieldCheck, Globe, Settings as SettingsIcon } from 'lucide-react';
+import { Sun, Moon, LayoutDashboard, ShieldCheck, Globe, Settings as SettingsIcon, BarChart3 } from 'lucide-react';
 import { TierMaxLogo, CyberTerminalGlyph, DualEngineGlyph } from './components/Icons';
 import { WelcomeServerModal } from './components/WelcomeServerModal';
 import Login from './pages/Login';
@@ -11,6 +11,7 @@ import Playground from './pages/Playground';
 import EngineSettings from './pages/EngineSettings';
 import AuditLogs from './pages/AuditLogs';
 import Settings from './pages/Settings';
+import GlobalAnalytics from './pages/GlobalAnalytics';
 import { LanguageProvider, useLanguage } from './i18n';
 import { ThemeProvider, useTheme } from './ThemeContext';
 import { ToastProvider } from './ToastContext';
@@ -128,6 +129,15 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               >
                 <LayoutDashboard size={13} />
                 <span className="nav-link-text">{t('nav.projects')}</span>
+              </Link>
+              <Link
+                to="/analytics"
+                className={`btn btn-sm ${location.pathname === '/analytics' ? 'btn-primary' : 'btn-ghost'}`}
+                style={{ padding: '0.3rem 0.65rem', fontSize: '0.75rem', borderRadius: 'var(--radius-pill)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                title={t('nav.analytics')}
+              >
+                <BarChart3 size={13} />
+                <span className="nav-link-text">{t('nav.analytics')}</span>
               </Link>
               <Link
                 to="/playground"
@@ -266,6 +276,7 @@ function App() {
                   <Route path="/login" element={<Login />} />
                   <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
                   <Route path="/projects/:id" element={<PrivateRoute><ProjectDetail /></PrivateRoute>} />
+                  <Route path="/analytics" element={<PrivateRoute><GlobalAnalytics /></PrivateRoute>} />
                   <Route path="/playground" element={<PrivateRoute><Playground /></PrivateRoute>} />
                   <Route path="/engine" element={<PrivateRoute><EngineSettings /></PrivateRoute>} />
                   <Route path="/audit" element={<PrivateRoute><AuditLogs /></PrivateRoute>} />
