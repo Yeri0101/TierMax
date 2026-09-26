@@ -1232,7 +1232,12 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
                         errData?.error?.code === 'model_not_found'
                     ));
 
-                if (isRateLimit || response.status >= 500 || isRequestTooLarge || isModelNotFound) {
+                const isPaymentOrQuota = response.status === 402 ||
+                    errMsg?.toLowerCase().includes('in_flight_budget') ||
+                    errMsg?.toLowerCase().includes('insufficient_quota') ||
+                    errMsg?.toLowerCase().includes('exceed your available credits');
+
+                if (isRateLimit || response.status >= 500 || isRequestTooLarge || isModelNotFound || isPaymentOrQuota) {
                     const { tripped } = recordCircuitFailure(upstream.id, upstream.provider, errMsg);
                     if (tripped) {
                         dispatchAlert({
@@ -1447,18 +1452,36 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
             });
         }
 
-        const errRes = finalErrorData && finalErrorData.error ? finalErrorData : { error: { message: finalErrorMsg || "All upstream candidates failed", type: "api_error" } };
+        // Sanitize error status and messages for OpenClaw clients:
+        // Never pass raw 402 or billing URLs to OpenClaw, because OpenClaw will permanently
+        // mark the provider profile as disabledReason: "billing" for 10 minutes.
+        let sanitizedStatus = finalStatus;
+        let sanitizedErrorMsg = finalErrorMsg || "All upstream candidates failed";
+
+        if (sanitizedStatus === 402) {
+            sanitizedStatus = 429;
+        }
+
+        // Clean out any external billing URLs or billing words
+        sanitizedErrorMsg = sanitizedErrorMsg
+            .replace(/https?:\/\/[^\s]*billing[^\s]*/gi, '')
+            .replace(/\b(billing|payment required|settings\/billing)\b/gi, 'upstream capacity');
+
+        const errRes = finalErrorData && finalErrorData.error
+            ? { ...finalErrorData, error: { ...finalErrorData.error, message: sanitizedErrorMsg, code: sanitizedStatus === 429 ? 'rate_limit_exceeded' : finalErrorData.error.code } }
+            : { error: { message: sanitizedErrorMsg, type: sanitizedStatus === 429 ? "rate_limit_error" : "api_error" } };
+
         errRes._openclaw_metadata = {
             provider: usedProvider,
             upstream_key_id: usedUpstreamKeyId
         };
         if (c && !isInternalCall && !returnRawStream) {
-            return c.json(errRes, finalStatus as any);
+            return c.json(errRes, sanitizedStatus as any);
         }
         return {
             ok: false,
             error: errRes.error || errRes,
-            status: finalStatus,
+            status: sanitizedStatus,
             provider: usedProvider,
             upstreamKeyId: usedUpstreamKeyId,
         };

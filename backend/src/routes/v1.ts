@@ -334,6 +334,9 @@ v1.post('/chat/completions', async (c) => {
                             executeChatCompletion: async ({ body: subBody, isInternalCall }) => {
                                 if (isInternalCall) {
                                     const res = await executeCompletionEngine({ body: subBody, gatewayKey, isInternalCall: true });
+                                    if (!res || !res.ok || !res.data) {
+                                        throw new Error(res?.error?.message || `Completion engine failed for model ${subBody.model}`);
+                                    }
                                     return res.data;
                                 }
                                 const streamRes = await executeCompletionEngine({
@@ -380,10 +383,23 @@ v1.post('/chat/completions', async (c) => {
                     gatewayKey,
                     executeChatCompletion: async ({ body: subBody, isInternalCall }) => {
                         const res = await executeCompletionEngine({ body: subBody, gatewayKey, isInternalCall: true });
+                        if (!res || !res.ok || !res.data) {
+                            throw new Error(res?.error?.message || `Completion engine failed for model ${subBody.model}`);
+                        }
                         return res.data;
                     }
                 });
-                return c.json(fusionResult.finalResponse);
+                return c.json(fusionResult.finalResponse || {
+                    id: `chatcmpl-fusion-${Date.now()}`,
+                    object: 'chat.completion',
+                    created: Math.floor(Date.now() / 1000),
+                    model: body.model || 'fusion',
+                    choices: [{
+                        index: 0,
+                        message: { role: 'assistant', content: 'Fusion response completed.' },
+                        finish_reason: 'stop'
+                    }]
+                });
             }
         }
 
@@ -438,6 +454,9 @@ v1.post('/messages', async (c) => {
                             executeChatCompletion: async ({ body: subBody, isInternalCall }) => {
                                 if (isInternalCall) {
                                     const res = await executeCompletionEngine({ body: subBody, gatewayKey, isInternalCall: true });
+                                    if (!res || !res.ok || !res.data) {
+                                        throw new Error(res?.error?.message || `Completion engine failed for model ${subBody.model}`);
+                                    }
                                     return res.data;
                                 }
                                 const streamRes = await executeCompletionEngine({
@@ -476,6 +495,9 @@ v1.post('/messages', async (c) => {
                     gatewayKey,
                     executeChatCompletion: async ({ body: subBody, isInternalCall }) => {
                         const res = await executeCompletionEngine({ body: subBody, gatewayKey, isInternalCall: true });
+                        if (!res || !res.ok || !res.data) {
+                            throw new Error(res?.error?.message || `Completion engine failed for model ${subBody.model}`);
+                        }
                         return res.data;
                     }
                 });

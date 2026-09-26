@@ -35,14 +35,12 @@ import { getEngineConfig } from './engineBridge';
  * Default fast & diverse panel candidates in TierMax
  */
 const DEFAULT_FUSION_PANEL = [
-    'deepseek-chat',
     'qwen/qwen3.8-27b',
-    'moonshotai/kimi-k3',
-    'minimaxai/minimax-m3',
-    'meta/llama-3.3-70b-instruct',
-    'llama-3.3-70b-versatile',
-    'google/gemma-4-31b-it',
     'gemini-2.5-flash',
+    'deepseek-chat',
+    'open-mistral-nemo',
+    'meta/llama-3.3-70b-instruct',
+    'moonshotai/kimi-k3',
 ];
 
 /**
@@ -281,6 +279,9 @@ export async function executeFusion(options: FusionExecuteOptions): Promise<{
             gatewayKey,
             isInternalCall: false, // allow streaming if requested
         });
+        if (!body.stream && (!judgeResult || !judgeResult.choices || !judgeResult.choices.length || !judgeResult.choices[0]?.message?.content)) {
+            throw new Error(`Judge model ${judge} returned invalid or empty response`);
+        }
     } catch (judgeErr: any) {
         console.warn(`[Fusion] Judge dispatch failed (${judgeErr.message}). Falling back directly to winning draft (${bestDraft.model}).`);
         judgeResult = {
@@ -288,6 +289,25 @@ export async function executeFusion(options: FusionExecuteOptions): Promise<{
             object: 'chat.completion',
             created: Math.floor(Date.now() / 1000),
             model: judge,
+            choices: [{
+                index: 0,
+                message: {
+                    role: 'assistant',
+                    content: bestDraft.content,
+                },
+                finish_reason: 'stop',
+            }],
+            usage: bestDraft.usage,
+        };
+    }
+
+    // Safety net: ensure judgeResult is never undefined or empty in non-streaming mode
+    if (!body.stream && (!judgeResult || typeof judgeResult !== 'object' || !judgeResult.choices || !judgeResult.choices.length)) {
+        judgeResult = {
+            id: `chatcmpl-fusion-${Date.now()}`,
+            object: 'chat.completion',
+            created: Math.floor(Date.now() / 1000),
+            model: judge || bestDraft.model,
             choices: [{
                 index: 0,
                 message: {
